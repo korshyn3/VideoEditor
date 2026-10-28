@@ -1,0 +1,9 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+*.vcxproj.user
+*.aps
+*.VC.db
+*.VC.VC.opendb
+*.suo

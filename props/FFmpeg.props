@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FFmpeg.props - Enlace con el build propio de FFmpeg.
+
+  Solo la importan los proyectos que PUEDEN usar FFmpeg: EditorEngine, VideoEditor (para
+  copiar las DLLs) y EditorTests. EditorModel y EditorController NO la importan, así que
+  el compilador no encuentra los headers de FFmpeg allí: es la frontera MVC.
+
+  Para usar otra instalación de FFmpeg basta con cambiar la macro FFmpegRoot
+  (Administrador de propiedades > FFmpeg > Macros de usuario).
+
+  Nota: en este build los .lib de importación están en bin\ (junto a las DLLs), no en lib\.
+-->
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="UserMacros">
+    <FFmpegRoot Condition="'$(FFmpegRoot)'==''">E:\PrograSistemas\FFmpeg_9\msvc</FFmpegRoot>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Include "externo": los warnings de los headers de FFmpeg no ensucian la salida. -->
+    <ExternalIncludePath>$(FFmpegRoot)\include;$(ExternalIncludePath)</ExternalIncludePath>
+    <LibraryPath>$(FFmpegRoot)\bin;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>avformat.lib;avcodec.lib;avfilter.lib;swscale.lib;swresample.lib;avutil.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="FFmpegRoot">
+      <Value>$(FFmpegRoot)</Value>
+    </BuildMacro>
+  </ItemGroup>
+
+  <!-- Error claro (en vez de cientos de errores de include) si FFmpegRoot es incorrecta. -->
+  <Target Name="VerificarFFmpegRoot" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(FFmpegRoot)\include\libavcodec\avcodec.h')"
+           Text="No se encontró FFmpeg en FFmpegRoot='$(FFmpegRoot)'. Se esperaba '$(FFmpegRoot)\include\libavcodec\avcodec.h'. Corrige la macro FFmpegRoot en props\FFmpeg.props." />
+    <Error Condition="!Exists('$(FFmpegRoot)\bin\avcodec.lib')"
+           Text="No se encontró '$(FFmpegRoot)\bin\avcodec.lib' (bibliotecas de importación de FFmpeg)." />
+  </Target>
+
+  <!--
+    Copia de las DLLs de FFmpeg junto al ejecutable (solo en proyectos que generan .exe),
+    para que F5 desde Visual Studio funcione sin tocar el PATH.
+  -->
+  <Target Name="CopiarDllsFFmpeg" AfterTargets="Build" Condition="'$(ConfigurationType)'=='Application'">
+    <ItemGroup>
+      <DllsFFmpeg Include="$(FFmpegRoot)\bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DllsFFmpeg)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

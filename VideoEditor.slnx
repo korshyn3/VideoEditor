@@ -1,0 +1,14 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/props/">
+    <File Path="props/Common.props" />
+    <File Path="props/FFmpeg.props" />
+  </Folder>
+  <Project Path="src/EditorModel/EditorModel.vcxproj" Id="c62abc0a-dc2c-46a7-85b6-2fc5833807e0" />
+  <Project Path="src/EditorEngine/EditorEngine.vcxproj" Id="5aad4e79-f509-4174-8f77-a68f74314bf6" />
+  <Project Path="src/EditorController/EditorController.vcxproj" Id="607ed3af-c4ea-4709-ad34-94d80c051592" />
+  <Project Path="src/VideoEditor/VideoEditor.vcxproj" Id="f9009ad5-14e4-4a5c-b554-0498d60d7594" />
+  <Project Path="tests/EditorTests/EditorTests.vcxproj" Id="8624da26-5605-49c9-ad98-34366e013897" />
+</Solution>

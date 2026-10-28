@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Common.props - Configuración compartida por TODOS los proyectos de la solución.
+
+  - C++20, /utf-8 (los fuentes están en UTF-8 y tienen tildes), /W4 y modo conforme.
+  - third_party/ (nlohmann/json, doctest) como include "externo": sus warnings no se muestran.
+  - Una sola carpeta de salida para todos los ejecutables (bin\Debug, bin\Release), así
+    la app y los tests comparten las DLLs de FFmpeg copiadas en el post-build.
+-->
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="UserMacros">
+    <!-- Raíz del repositorio (este archivo vive en <raíz>\props\). -->
+    <RaizRepo>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RaizRepo>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OutDir>$(RaizRepo)bin\$(Configuration)\</OutDir>
+    <IntDir>$(RaizRepo)obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <ExternalIncludePath>$(RaizRepo)third_party;$(ExternalIncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <WarningLevel>Level4</WarningLevel>
+      <ConformanceMode>true</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <!-- Cada capa incluye sus headers como "Carpeta/Archivo.h" a partir de src\. -->
+      <AdditionalIncludeDirectories>$(RaizRepo)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="RaizRepo">
+      <Value>$(RaizRepo)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
