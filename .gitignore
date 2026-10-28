@@ -7,3 +7,15 @@ obj/
 *.VC.db
 *.VC.VC.opendb
 *.suo
+
+# Salidas por defecto de MSBuild (por si un proyecto se compila sin props\Common.props)
+x64/
+Debug/
+Release/
+
+# Caché de IntelliSense
+ipch/
+*.ipch
+
+# Configuración personal de Claude Code (los comandos/skills de .claude sí se versionan)
+.claude/settings.local.json

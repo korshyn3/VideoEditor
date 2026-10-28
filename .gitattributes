@@ -61,3 +61,8 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Los .rc los guarda Visual Studio en UTF-16. Con esta línea git los convierte a UTF-8
+# internamente: `git diff` muestra los cambios como texto y el archivo en disco sigue
+# en UTF-16 (como lo espera el Editor de recursos).
+*.rc text working-tree-encoding=UTF-16LE-BOM eol=crlf
