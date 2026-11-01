@@ -5,7 +5,7 @@ Guardar el proyecto completo en un archivo JSON legible y volver a cargarlo desp
 ## ADDED Requirements
 
 ### Requirement: Guardar proyecto en JSON
-El usuario MUST poder guardar el proyecto en un archivo JSON. El archivo incluye un número de versión de formato, la configuración del lienzo (resolución y fps), las pistas (tipo, nombre y mute), los clips (ruta del medio, in, out, posición, audio vinculado, efectos con parámetros y transformación PiP), las transiciones (clips involucrados, estilo y duración) y la última configuración de exportación.
+El usuario MUST poder guardar el proyecto en un archivo JSON. El archivo incluye un número de versión de formato, la configuración del lienzo (resolución y fps), las pistas (tipo, nombre, mute y, para las pistas de audio de video, a qué pista de video pertenecen), los clips (ruta del medio, in, out, posición, clip vinculado, efectos con parámetros y transformación PiP), las transiciones (clips involucrados, estilo y duración) y la última configuración de exportación.
 
 #### Scenario: Guardar
 - **WHEN** el usuario guarda un proyecto con dos pistas de video, efectos y una transición

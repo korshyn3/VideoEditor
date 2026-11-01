@@ -74,14 +74,15 @@ No se usa vcpkg: las dos bibliotecas que quedan (`nlohmann/json` y `doctest`) so
   - `Project` contiene `MediaPool`, `Timeline`, `CanvasSettings {w, h, fps}`, `ExportSettings`, `dirty` y `revision`.
   - `MediaPool` guarda los `MediaInfo` (ruta UTF-8, duración, hasVideo/hasAudio, w, h, fps, códecs, sampleRate, channels, offline).
   - `Timeline` contiene un `vector<Track>`.
-  - `Track` tiene `{id, kind: Video|Audio, name, muted, clips, transitions}`.
-  - `Clip` tiene `{id, mediaId, sourceIn, sourceOut, timelineStart, linkedAudio, effects, transform}`.
+  - `Track` tiene `{id, kind: Video|Audio, name, muted, videoTrackId, clips, transitions}`. `videoTrackId` es la pista de video a la que pertenece una **pista de audio de video** ("Audio V1"); vale `kSinId` en las pistas de video y en las **pistas de audio generales** (A1, A2...).
+  - `Clip` tiene `{id, mediaId, sourceIn, sourceOut, timelineStart, linkedClipId, effects, transform}`. `linkedClipId` une un clip de video con su clip de audio (en los dos sentidos); `kSinId` = sin vínculo.
   - `Effect` es un `std::variant<Grayscale, BrightnessContrast, Blur, Fade>`.
   - `Transition` tiene `{fromClipId, toClipId, style, duration}`.
   - `PipTransform` tiene `{x, y, scale, opacity}`.
-- **Invariantes**: los clips de una pista no se solapan, *salvo* que exista una transición entre ellos, y en ese caso se solapan exactamente `duration`. Siempre hay al menos una pista de video. `sourceIn < sourceOut <= media.duration`. Las operaciones (`split`, `trim`, `move`, `remove(ripple)`, `addTransition`, `separateAudio`...) son métodos que validan y devuelven `OpResult {bool ok; std::string error;}`. No se usa `std::expected` porque es de C++23.
+- **Invariantes**: los clips de una pista no se solapan, *salvo* que exista una transición entre ellos, y en ese caso se solapan exactamente `duration`. Siempre hay al menos una pista de video, y cada pista de video tiene exactamente una pista de audio de video. `sourceIn < sourceOut <= media.duration`. Dos clips vinculados tienen siempre el mismo `mediaId`, `sourceIn`, `sourceOut` y `timelineStart`, y el de audio está en la pista de audio de la pista de video del otro. Las operaciones (`split`, `trim`, `move`, `remove(ripple)`, `addTransition`, `unlinkAudio`...) son métodos que validan y devuelven `OpResult {bool ok; std::string error;}`. No se usa `std::expected` porque es de C++23.
+- **Operaciones sobre clips vinculados**: cada operación calcula el resultado para el clip y para su vinculado, valida los dos (solapes en las dos pistas) y solo entonces aplica ambos cambios; si alguno falla no cambia nada. Así el invariante de vínculo nunca se rompe a medias. Eliminar una pista desvincula los clips de otras pistas que estaban unidos a los suyos.
 - **Notificación de cambios**: cada mutación correcta incrementa `Project::revision`. El preview compara revisiones para saber que debe reconstruir. Se eligió en lugar de observers/señales porque es más simple de seguir: la View compara la revisión al recibir un mensaje o en su timer y redibuja si cambió.
-- **Transiciones como solapamiento**: agregar una transición de duración D desplaza a la izquierda en D al clip `to` y a todos los siguientes de la pista. Quitarla los devuelve. Es lo que exigen `xfade` y `acrossfade`, cuya salida dura `la + lb - D`. Se descartó tomar material extra de fuera de in/out (handles) porque complica el modelo y obligaría a que existan esos márgenes en la fuente.
+- **Transiciones como solapamiento**: agregar una transición de duración D desplaza a la izquierda en D al clip `to` y a todos los siguientes de la pista. Los clips de audio vinculados a esos clips se desplazan igual, y en la pista de audio de video se registra una transición espejo entre los audios vinculados de `from` y `to` (que el engine traduce a `acrossfade`); si solo uno tiene audio vinculado, ese audio hace `afade` durante D. Quitarla los devuelve. Es lo que exigen `xfade` y `acrossfade`, cuya salida dura `la + lb - D`. Se descartó tomar material extra de fuera de in/out (handles) porque complica el modelo y obligaría a que existan esos márgenes en la fuente.
 - **Mapeo de estilos a xfade**: `dissolve→fade`, `wipe→wipeleft|wiperight`, `slide→slideleft|slideright` y `circle→circleopen`.
 
 ### D5. Persistencia JSON
@@ -100,7 +101,7 @@ color=c=black:s=WxH:r=F, format=yuv420p, setsar=1, trim=end_frame=N1 [s1];      
 [s0][s1][s2] concat=n=3:v=1:a=0, setpts=PTS+T0/TB [vt0];                             # pista completa
 [vt0][vt1] overlay=0:0:eof_action=pass [vout];   # pistas superiores (PiP, fase 8) encima de V1
 
-# Audio: cada pista también es un concat (audio vinculado de V1, pistas A1, A2...):
+# Audio: cada pista de audio (de video y general) también es un concat; las pistas de video no aportan audio:
 [in1] atrim=start=IN:end=OUT, asetpts=PTS-STARTPTS, aresample=48000,
       aformat=sample_fmts=fltp:channel_layouts=stereo, apad=whole_dur=D, atrim=duration=D [sa0];
 anullsrc=r=48000:cl=stereo, aformat=..., atrim=duration=G [sa1];                    # silencio
@@ -147,10 +148,10 @@ Se consideró y descartó un *compositor por cuadro* hecho a mano (decodificar c
 
 ### D10. Controller y View (MFC)
 
-- `EditorController` (C++ estándar, sin MFC) expone acciones de alto nivel (`importFiles`, `splitAtPlayhead`, `trimClip`, `deleteClip(ripple)`, `separateAudio`, `addEffect`, `setTransition`, `setPipTransform`, `save/load`, `startExport`/`cancelExport`...). Cada una valida, llama al modelo y devuelve `OpResult`. **La View nunca modifica el modelo:** lo lee como `const` y llama al controller. Los handlers `OnBnClicked...` deben tener pocas líneas: convertir los datos del control y llamar al controller.
+- `EditorController` (C++ estándar, sin MFC) expone acciones de alto nivel (`importFiles`, `splitAtPlayhead`, `trimClip`, `deleteClip(ripple)`, `unlinkAudio`, `addEffect`, `setTransition`, `setPipTransform`, `save/load`, `startExport`/`cancelExport`...). Cada una valida, llama al modelo y devuelve `OpResult`. **La View nunca modifica el modelo:** lo lee como `const` y llama al controller. Los handlers `OnBnClicked...` deben tener pocas líneas: convertir los datos del control y llamar al controller.
 - **Ventana principal**: `CEditorDlg : CDialogEx` (como `CCambiarBMPDlg`), diseñada en el `.rc`:
   - Un menú `IDR_MENU_PRINCIPAL` (Archivo, Editar, Pistas, Ayuda) y una tabla de aceleradores (Espacio = play/pausa, S = split, Supr / Shift+Supr = eliminar, Ctrl+S = guardar), que se aplica en `PreTranslateMessage`.
-  - Una barra de botones (Importar, Play/Pausa, Split, Separar audio, Exportar).
+  - Una barra de botones (Importar, Play/Pausa, Split, Desvincular audio, Exportar).
   - Dos *Custom Control* (o `static` marcadores) para el preview y el timeline.
   - El panel de propiedades.
   - **Diseño dinámico** del Editor de recursos (propiedades *Moving/Sizing*) para que los controles se reacomoden al cambiar el tamaño de la ventana.

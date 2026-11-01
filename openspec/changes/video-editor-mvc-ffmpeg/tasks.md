@@ -38,12 +38,18 @@
 - [x] 4.3 Implementar eliminar clip normal y con ripple (menú, menú contextual y teclas Supr / Shift+Supr); verificar con tests "Eliminar dejando hueco", "Eliminar con ripple" y "Eliminar un segmento intermedio", y en el preview que el hueco se ve negro y en silencio
 - [x] 4.4 Agregar un test de no destructividad que guarda hash y fecha de modificación de los medios de prueba antes y después de editar; verificar que no cambian (escenario "Edición no destructiva")
 
-## 5. Fase 5 — Pistas de audio (separar / agregar)
+## 5. Fase 5 — Pistas de audio (audio vinculado / desvincular / agregar)
+
+> Las tareas 5.1 y 5.3 se hicieron con el modelo anterior ("separar audio" creaba el clip de audio). El modelo cambió a audio vinculado con pistas de audio de video y generales (specs/audio-tracks, design D4); las tareas 5.5–5.7 rehacen esa parte y van **antes** que 5.2 y 5.4.
+
 
 - [x] 5.1 Implementar `separateAudio` en el modelo (clip de audio en pista libre o nueva, desvincular audio del video, rechazo si no hay audio); verificar con tests "Separar audio" y "Clip sin audio"
-- [ ] 5.2 Extender `FilterGraphBuilder` con clips de pistas de audio (atrim + adelay) y omitir pistas silenciadas; verificar con tests de cadena y a mano los escenarios "Mover el audio separado", "Borrar el audio separado", "Música sobre video con audio" y "Pista silenciada"
+- [ ] 5.2 Extender `FilterGraphBuilder` para que todo el audio salga de las pistas de audio (de video y generales, cada una un concat de tramos), las pistas de video no aporten audio y se omitan las pistas silenciadas; verificar con tests de cadena y a mano los escenarios "Mover el audio desvinculado", "Borrar el audio desvinculado", "Música sobre video con audio" y "Pista silenciada"
 - [x] 5.3 Implementar importación de mp3/wav/aac en la pista de audio seleccionada y la colocación solo-audio de archivos de video en pistas de audio; verificar con tests "Importar música" e "Importar video en pista de audio"
-- [ ] 5.4 Dibujar los clips de audio con otro color en `CTimelineWnd`, añadir el botón de mute en la cabecera de cada pista y la acción "Separar audio" (botón y menú contextual); verificar a mano el flujo completo separar → mover → borrar
+- [ ] 5.4 Dibujar los clips de audio con otro color en `CTimelineWnd` y en el orden de design (video, audio de video, generales), una marca de vínculo en los clips vinculados, el botón de mute en la cabecera de cada pista de audio y la acción "Desvincular audio" (botón, menú Editar y menú contextual); verificar a mano el flujo importar → mover juntos (también a V2) → desvincular → llevar el audio a A1 → borrar
+- [ ] 5.5 Rehacer el modelo de pistas y vínculo: `Track::videoTrackId`, pista "Audio Vn" creada y eliminada junto con su pista de video (y no eliminable sola), proyecto nuevo V1 + Audio V1 + A1, pistas de audio agregadas como generales, `Clip::linkedClipId` en lugar de `linkedAudio`, `appendMedia` en pista de video crea el clip de audio vinculado y `unlinkAudio` reemplaza a `separateAudio`; verificar con tests los escenarios de "Tipos de pista de audio", "Importar un video con audio", "Importar un video sin audio", "Desvincular audio" y "Clip sin audio"
+- [ ] 5.6 Aplicar las operaciones a los clips vinculados (mover —el audio sigue a la pista de audio de la pista de video destino—, split, trim, eliminar con y sin ripple en las dos pistas, validación conjunta sin cambios a medias) y desvincular al eliminar una pista; adaptar los tests de las fases 2–4 y verificar con tests "Mover el video a otra pista", "Mover el audio vinculado", "Split conserva el audio vinculado", "Recortar un clip vinculado", "Eliminar un clip vinculado", "Movimiento rechazado por el audio", "Mover un video desvinculado" y "Llevar el audio a una pista general"
+- [ ] 5.7 Ajustar la importación en el controller (videos a la pista de video seleccionada o V1; archivos de audio a la pista general seleccionada o a la primera general; un video con una pista general seleccionada se coloca solo como audio sin vínculo) y la acción `unlinkAudio`; verificar con tests "Importar música" e "Importar video en pista de audio"
 
 ## 6. Fase 6 — Efectos
 
@@ -53,8 +59,8 @@
 
 ## 7. Fase 7 — Transiciones entre clips
 
-- [ ] 7.1 Implementar en el modelo agregar/cambiar/quitar transición con solapamiento y desplazamiento de los clips siguientes, validación de contigüidad y duración máxima, y eliminación automática al invalidarse; verificar con tests "Transición de 1 segundo", "Clips no contiguos", "Duración excesiva", "Cambiar la duración", "Quitar la transición" y "Eliminar un clip con transición"
-- [ ] 7.2 Extender `FilterGraphBuilder` con segmentos unidos por `xfade` (mapeo de estilos de design D4), `acrossfade` para el audio vinculado con `anullsrc` en el lado sin audio, y arranque en T dentro de una transición (retroceso a T0 y descarte); verificar con tests de cadena y un test de integración que la salida dura `la + lb − D`
+- [ ] 7.1 Implementar en el modelo agregar/cambiar/quitar transición con solapamiento y desplazamiento de los clips siguientes (y de sus audios vinculados, con la transición espejo en la pista de audio de video; rechazo si el audio se solaparía), validación de contigüidad y duración máxima, y eliminación automática al invalidarse; verificar con tests "Transición de 1 segundo", "Clips no contiguos", "Duración excesiva", "Cambiar la duración", "Quitar la transición" y "Eliminar un clip con transición"
+- [ ] 7.2 Extender `FilterGraphBuilder` con segmentos unidos por `xfade` (mapeo de estilos de design D4), `acrossfade` entre los clips de audio vinculados de la pista de audio de video (o `afade` si solo uno tiene audio), y arranque en T dentro de una transición (retroceso a T0 y descarte); verificar con tests de cadena y un test de integración que la salida dura `la + lb − D`
 - [ ] 7.3 Dibujar las transiciones en `CTimelineWnd` (rombo seleccionable, "Agregar transición" en el menú contextual entre dos clips) y diseñar `IDD_PROP_TRANSICION` (estilo, dirección, duración, quitar); verificar a mano "Elegir barrido", "Elegir círculo", "Cambiar el estilo", "Audio en ambos clips" y "Solo un clip con audio"
 
 ## 8. Fase 8 — Overlay picture-in-picture
@@ -73,13 +79,13 @@
 
 ## 10. Persistencia del proyecto (JSON)
 
-- [ ] 10.1 Implementar `ProjectSerializer` (formatVersion 1, todas las entidades, validación completa antes de reemplazar el proyecto); verificar con tests "Guardar", "Ida y vuelta" y "JSON corrupto"
+- [ ] 10.1 Implementar `ProjectSerializer` (formatVersion 1, todas las entidades —incluidos `videoTrackId` de las pistas y `linkedClipId` de los clips—, validación completa antes de reemplazar el proyecto, incluido que los vínculos sean coherentes); verificar con tests "Guardar", "Ida y vuelta" (conserva los vínculos) y "JSON corrupto"
 - [ ] 10.2 Implementar en el controller la revalidación de medios al cargar (clips offline renderizados en negro y en silencio, aviso con rutas faltantes); verificar con un test "Archivo movido"
 - [ ] 10.3 Conectar Archivo → Nuevo/Abrir/Guardar/Guardar como (`CFileDialog` con filtro `.json`, Ctrl+S) y el aviso de cambios sin guardar (Sí/No/Cancelar) en `OnClose`, Nuevo y Abrir; verificar a mano "Cerrar con cambios"
 
 ## 11. Integración final
 
-- [ ] 11.1 Recorrer de punta a punta un proyecto con tres videos, un split, un trim, audio separado, música, efectos, una transición círculo y un PiP; guardar, reabrir y exportar a mp4, mkv y mov; verificar que el resultado coincide con el preview y que los medios fuente no cambiaron
+- [ ] 11.1 Recorrer de punta a punta un proyecto con tres videos, un split, un trim, audio desvinculado y llevado a A1, música, efectos, una transición círculo y un PiP; guardar, reabrir y exportar a mp4, mkv y mov; verificar que el resultado coincide con el preview y que los medios fuente no cambiaron
 - [ ] 11.2 Revisar que cada archivo tiene comentarios de cabecera que explican su responsabilidad y su capa, y que el README describe cómo abrir la solución en VS 2026, cómo cambiar `FFmpegRoot` y cómo correr los tests; verificar copiando el repositorio a una carpeta limpia y compilando con los pasos del README
 
 ## Workflow follow-up

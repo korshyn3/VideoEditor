@@ -34,7 +34,7 @@ La duración MUST indicarse en segundos, ser mayor que 0 y no superar la duraci�
 - **THEN** el sistema la rechaza o la limita al máximo permitido e informa al usuario
 
 ### Requirement: Crossfade de audio en la transición
-Si alguno de los dos clips tiene audio vinculado, el sistema MUST hacer crossfade de ese audio durante la transición: el audio de A baja mientras el de B sube, con la misma duración. Un clip cuyo audio ya se separó no participa (la pista de audio separada no se ve afectada).
+Si alguno de los dos clips tiene audio vinculado, el sistema MUST hacer crossfade de ese audio durante la transición: los clips de audio vinculados (que están en la misma pista de audio de video) se solapan igual que los de video y el audio de A baja mientras el de B sube, con la misma duración. Un clip cuyo audio se desvinculó no participa (su clip de audio no se ve afectado). Si correr los clips de audio vinculados los haría solaparse con otro clip de su pista, la transición se rechaza.
 
 #### Scenario: Audio en ambos clips
 - **WHEN** A y B tienen audio vinculado y hay una transición de 2 s entre ellos

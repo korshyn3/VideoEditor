@@ -13,7 +13,8 @@ Es un proyecto académico: un editor de video básico, no destructivo, escrito e
   - **Controller**: traduce las acciones del usuario en cambios del modelo.
   - **Engine/servicios**: es la única capa que llama a FFmpeg (probe, decodificación, grafos de filtros, mezcla de audio y encoding).
 - Importa videos y audios (mp3, wav, aac) y los coloca en pistas.
-- Permite editar el timeline con split en el cursor, trim de inicio y fin, eliminar clips, mover clips y separar el audio de un clip de video en una pista de audio independiente.
+- Permite editar el timeline con split en el cursor, trim de inicio y fin, eliminar clips y mover clips.
+- Cada pista de video tiene su propia pista de audio, donde aparece automáticamente el audio de sus videos, vinculado al clip de video (se mueven, dividen, recortan y eliminan juntos). El audio se puede desvincular. Además hay pistas de audio generales para música y para audios desvinculados.
 - Agrega efectos por clip mediante libavfilter: escala de grises, brillo/contraste, desenfoque y fade in/out.
 - Agrega transiciones entre clips consecutivos de la misma pista con xfade (dissolve, wipe, slide y círculo) y una duración configurable. El audio hace crossfade (acrossfade). Las transiciones se pueden cambiar o quitar.
 - Permite picture-in-picture: varias pistas de video, donde la superior se superpone con posición, escala y opacidad configurables.
@@ -28,7 +29,7 @@ Es un proyecto académico: un editor de video básico, no destructivo, escrito e
 
 - `media-import`: abrir y analizar archivos de video y audio (duración, streams, resolución, fps, códecs) y rechazar con un mensaje claro los archivos inválidos o no soportados.
 - `timeline-editing`: estructura multipista del timeline y operaciones sobre clips (agregar en orden, mover, split, trim y eliminar), siempre sin modificar los archivos originales.
-- `audio-tracks`: pistas de audio, importación de archivos de audio y separación del audio de un clip de video en una pista independiente.
+- `audio-tracks`: pistas de audio de video (una por pista de video, con el audio vinculado de sus clips) y pistas de audio generales, importación de archivos de audio, desvinculación del audio y mezcla.
 - `video-effects`: efectos por clip (escala de grises, brillo/contraste, desenfoque y fade in/out) con sus parámetros.
 - `clip-transitions`: transiciones entre clips consecutivos de una misma pista, con estilo y duración, incluido el crossfade de audio.
 - `video-compositing`: composición de varias pistas de video con overlay picture-in-picture (posición, escala y opacidad).
