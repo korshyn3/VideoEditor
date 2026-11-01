@@ -9,3 +9,7 @@
 
 // El timeline cambió la selección, el cursor o el modelo (wParam = 1 si cambió el modelo).
 constexpr UINT WM_APP_VISTA_CAMBIO = WM_APP + 1;
+
+// El hilo de render del preview tiene novedades (cuadro en pausa, fin, error). Lo envía
+// con PostMessage, porque los hilos de trabajo nunca tocan las ventanas directamente.
+constexpr UINT WM_APP_PREVIEW_AVISO = WM_APP + 2;

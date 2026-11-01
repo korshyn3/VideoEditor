@@ -87,7 +87,56 @@ void EditorController::limpiarSeleccionClip() {
 }
 
 void EditorController::setPlayhead(model::TimeUs t) {
-    playhead_ = std::max<model::TimeUs>(0, t);
+    playhead_ = std::clamp<model::TimeUs>(t, 0, project_.timeline().duration());
+    if (preview_) preview_->seek(playhead_);
+}
+
+// ---------------------------------------------------------------------------
+// Preview
+// ---------------------------------------------------------------------------
+
+void EditorController::iniciarPreview(std::function<void()> aviso) {
+    preview_ = std::make_unique<engine::PlaybackEngine>(std::move(aviso));
+    revisionEnPreview_ = UINT64_MAX;
+    sincronizarPreview();
+    preview_->seek(playhead_);
+}
+
+void EditorController::sincronizarPreview() {
+    if (!preview_ || revisionEnPreview_ == project_.revision()) return;
+    revisionEnPreview_ = project_.revision();
+    // El engine recibe una COPIA: puede leerla en su hilo sin bloquear el modelo.
+    preview_->setTimeline({project_.timeline(), project_.media(), project_.canvas()});
+    // Si el timeline se acortó, el cursor no puede quedar más allá del final.
+    if (playhead_ > project_.timeline().duration()) setPlayhead(project_.timeline().duration());
+}
+
+void EditorController::reproducirPausar() {
+    if (!preview_) return;
+    if (preview_->reproduciendo()) {
+        preview_->pause();
+    } else {
+        sincronizarPreview();  // por si quedaba un cambio sin enviar
+        preview_->play();
+    }
+}
+
+bool EditorController::reproduciendo() const {
+    return preview_ && preview_->reproduciendo();
+}
+
+bool EditorController::actualizarPreview(engine::FrameBGRA& cuadro) {
+    if (!preview_) return false;
+    // Mientras se reproduce (y una vez más al terminar o pausar, para quedar en la
+    // posición final exacta) el cursor sigue al reloj del preview.
+    const bool reproduciendo = preview_->reproduciendo();
+    if (reproduciendo || seguiaReloj_) playhead_ = preview_->reloj();
+    seguiaReloj_ = reproduciendo;
+    return preview_->tomarCuadro(cuadro);
+}
+
+std::string EditorController::errorPreview() const {
+    return preview_ ? preview_->error() : std::string();
 }
 
 void EditorController::validarSeleccion() {

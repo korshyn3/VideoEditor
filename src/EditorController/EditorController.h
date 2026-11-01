@@ -11,8 +11,12 @@
 #pragma once
 
 #include "EditorEngine/MediaProbe.h"
+#include "EditorEngine/PlaybackEngine.h"
 #include "EditorModel/Project.h"
 
+#include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,7 +60,23 @@ public:
     // Selecciona el clip y también su pista.
     void seleccionarClip(model::Id clipId);
     void limpiarSeleccionClip();
+    // Mueve el cursor (y el preview, si está iniciado) a t, limitado a [0, duración].
     void setPlayhead(model::TimeUs t);
+
+    // ---- Preview -------------------------------------------------------------
+    // Crea el motor de reproducción (hilo de render). `aviso` se llama desde ese hilo
+    // cuando hay novedades; la View lo usa para hacer PostMessage a su ventana.
+    void iniciarPreview(std::function<void()> aviso);
+    // Detiene el hilo de render (llamar antes de destruir la ventana que recibe los avisos).
+    void detenerPreview() { preview_.reset(); }
+    // Envía al preview una copia del timeline si el modelo cambió desde el último envío.
+    void sincronizarPreview();
+    void reproducirPausar();
+    bool reproduciendo() const;
+    // Llamar periódicamente durante la reproducción: actualiza el cursor con el reloj del
+    // preview y devuelve true si hay un cuadro nuevo para mostrar en `cuadro`.
+    bool actualizarPreview(engine::FrameBGRA& cuadro);
+    std::string errorPreview() const;
 
 private:
     // Corrige la selección si la pista o el clip seleccionados ya no existen.
@@ -66,6 +86,9 @@ private:
     model::Project project_;
     Seleccion seleccion_;
     model::TimeUs playhead_ = 0;
+    std::unique_ptr<engine::PlaybackEngine> preview_;  // nullptr hasta iniciarPreview()
+    std::uint64_t revisionEnPreview_ = UINT64_MAX;      // revisión enviada al preview
+    bool seguiaReloj_ = false;                          // el cursor seguía al reloj del preview
 };
 
 } // namespace controller

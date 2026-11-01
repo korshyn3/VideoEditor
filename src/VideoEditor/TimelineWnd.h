@@ -36,6 +36,8 @@ public:
     }
     // Llamar después de cualquier cambio del modelo: ajusta la barra de scroll y redibuja.
     void Refrescar();
+    // Desplaza la vista si el cursor de reproducción salió del área visible.
+    void SeguirCursor();
 
 protected:
     afx_msg void OnPaint();

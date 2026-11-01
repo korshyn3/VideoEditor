@@ -42,6 +42,11 @@ CString TextoInfoMedio(const model::MediaInfo& info) {
 
 BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_WM_CLOSE()
+    ON_WM_DESTROY()
+    ON_WM_TIMER()
+    ON_BN_CLICKED(IDC_BTN_PLAY, &CEditorDlg::OnReproducir)
+    ON_COMMAND(ID_REPRODUCIR_PLAY, &CEditorDlg::OnReproducir)
+    ON_MESSAGE(WM_APP_PREVIEW_AVISO, &CEditorDlg::OnPreviewAviso)
     ON_WM_SIZE()
     ON_WM_GETMINMAXINFO()
     ON_BN_CLICKED(IDC_BTN_IMPORTAR, &CEditorDlg::OnImportar)
@@ -85,6 +90,10 @@ BOOL CEditorDlg::OnInitDialog() {
     ColocarPanelPropiedades();
     RefrescarVista();
 
+    // Preview: el hilo de render avisa con PostMessage (nunca toca la ventana directamente).
+    const HWND hwnd = m_hWnd;
+    m_controller.iniciarPreview([hwnd] { ::PostMessage(hwnd, WM_APP_PREVIEW_AVISO, 0, 0); });
+
     // El foco inicial va al timeline (para la rueda del mouse y los atajos). Se devuelve
     // FALSE porque el foco ya se fijó a mano.
     m_timeline.SetFocus();
@@ -92,15 +101,28 @@ BOOL CEditorDlg::OnInitDialog() {
 }
 
 BOOL CEditorDlg::PreTranslateMessage(MSG* pMsg) {
-    // Los atajos de teclado (Ctrl+I, ...) se traducen antes de que los procese el control
-    // que tiene el foco.
-    if (m_aceleradores && ::TranslateAccelerator(m_hWnd, m_aceleradores, pMsg)) return TRUE;
+    // Los atajos de teclado (Ctrl+I, Espacio...) se traducen antes de que los procese el
+    // control que tiene el foco. Excepción: en un cuadro de texto, las teclas sin Ctrl
+    // (como Espacio) son para escribir.
+    bool enCuadroDeTexto = false;
+    if (CWnd* foco = GetFocus()) {
+        wchar_t clase[16] = {};
+        ::GetClassNameW(foco->GetSafeHwnd(), clase, 16);
+        enCuadroDeTexto = _wcsicmp(clase, L"Edit") == 0 && !(::GetKeyState(VK_CONTROL) & 0x8000);
+    }
+    if (m_aceleradores && !enCuadroDeTexto && ::TranslateAccelerator(m_hWnd, m_aceleradores, pMsg)) return TRUE;
     return CDialogEx::PreTranslateMessage(pMsg);
 }
 
 void CEditorDlg::OnClose() {
     // (Fase 10: aquí se preguntará por los cambios sin guardar.)
     EndDialog(IDOK);
+}
+
+void CEditorDlg::OnDestroy() {
+    // El hilo de render se detiene ANTES de que la ventana deje de existir.
+    m_controller.detenerPreview();
+    CDialogEx::OnDestroy();
 }
 
 void CEditorDlg::OnSalir() {
@@ -154,6 +176,7 @@ void CEditorDlg::OnImportar() {
     CWaitCursor espera;  // analizar archivos grandes puede tardar un momento
     const controller::ImportResult r = m_controller.importFiles(rutas);
     RefrescarVista();
+    ProgramarSincronizacion();
 
     if (!r.errores.empty()) {
         CString msg;
@@ -189,15 +212,65 @@ void CEditorDlg::OnAcercaDe() {
                   MB_ICONINFORMATION);
 }
 
-LRESULT CEditorDlg::OnVistaCambio(WPARAM, LPARAM) {
+LRESULT CEditorDlg::OnVistaCambio(WPARAM wParam, LPARAM) {
     // El timeline ya se redibujó; se actualiza el resto de la interfaz.
     ActualizarPropiedades();
+    if (wParam) ProgramarSincronizacion();
     return 0;
 }
 
 void CEditorDlg::MostrarResultado(const model::OpResult& r) {
     RefrescarVista();
+    ProgramarSincronizacion();
     if (!r.ok) AfxMessageBox(CStringDesdeUtf8(r.error), MB_ICONWARNING);
+}
+
+// ---------------------------------------------------------------------------
+// Preview
+// ---------------------------------------------------------------------------
+
+void CEditorDlg::OnReproducir() {
+    m_controller.reproducirPausar();
+    // El timer se apaga solo en ActualizarReproduccion() cuando la reproducción termina.
+    SetTimer(kTimerReproduccion, 15, nullptr);
+    SetDlgItemText(IDC_BTN_PLAY, L"Pausa");
+}
+
+void CEditorDlg::ProgramarSincronizacion() {
+    SetTimer(kTimerSincronizar, 100, nullptr);
+}
+
+void CEditorDlg::OnTimer(UINT_PTR nIDEvent) {
+    if (nIDEvent == kTimerSincronizar) {
+        KillTimer(kTimerSincronizar);
+        m_controller.sincronizarPreview();
+    } else if (nIDEvent == kTimerReproduccion) {
+        ActualizarReproduccion();
+    }
+    CDialogEx::OnTimer(nIDEvent);
+}
+
+LRESULT CEditorDlg::OnPreviewAviso(WPARAM, LPARAM) {
+    ActualizarReproduccion();
+    const std::string error = m_controller.errorPreview();
+    if (!error.empty()) m_preview.MostrarMensaje(L"No se puede mostrar el preview:\r\n" + CStringDesdeUtf8(error));
+    return 0;
+}
+
+void CEditorDlg::ActualizarReproduccion() {
+    engine::FrameBGRA cuadro;
+    if (m_controller.actualizarPreview(cuadro)) m_preview.MostrarCuadro(std::move(cuadro));
+
+    const bool reproduciendo = m_controller.reproduciendo();
+    if (reproduciendo) {
+        m_timeline.SeguirCursor();
+    } else {
+        KillTimer(kTimerReproduccion);
+        m_timeline.Invalidate(FALSE);
+    }
+    SetDlgItemText(IDC_BTN_PLAY, reproduciendo ? L"Pausa" : L"Play");
+    SetDlgItemText(IDC_STATIC_TIEMPO, TextoTiempo(m_controller.playhead()) + L" / " +
+                                          TextoTiempo(m_controller.project().timeline().duration()));
 }
 
 // ---------------------------------------------------------------------------

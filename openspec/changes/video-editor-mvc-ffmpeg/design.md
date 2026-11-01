@@ -93,22 +93,28 @@ No se usa vcpkg: las dos bibliotecas que quedan (`nlohmann/json` y `doctest`) so
 Es la decisión central. Para un `TimelineSnapshot`, una resolución de salida y un instante inicial `T`, el builder genera **una cadena filter_complex** y la lista de entradas (una por clip: `buffer` de video y/o `abuffer` de audio). La cadena tiene esta forma:
 
 ```
-color=black:s=WxH:r=F:d=DUR,setpts=PTS+T0/TB [bg];
-[v0] setpts=PTS-STARTPTS+S0/TB, scale=W:H:force_original_aspect_ratio=decrease,
-     pad=W:H:(ow-iw)/2:(oh-ih)/2, fps=F, format=yuv420p, hue=s=0, fade=t=in:st=S0:d=1 [c0];
-[c0][c1] xfade=transition=circleopen:duration=1:offset=OFF [seg0];       # clips unidos por transiciones
-[bg][seg0] overlay=0:0:eof_action=pass [l1];                               # V1
-[v5] ..., scale=iw*K:-2, format=yuva420p, colorchannelmixer=aa=0.5 [c5];   # PiP en V2
-[l1][c5] overlay=x=X:y=Y:eof_action=pass [vout];
-anullsrc=r=48000:cl=stereo,atrim=duration=DUR [abg];
-[a0] atrim..., aresample=48000, aformat=fltp:stereo [ca0];  [ca0][ca1] acrossfade=d=1 [as0];
-[as0] adelay=...:all=1 [as0d];  [abg][as0d][ca7] amix=inputs=3:normalize=0 [aout]
+# Pista V1 = concat de segmentos (clips y huecos), cada uno con duración exacta en cuadros:
+[in0] setpts=PTS-STARTPTS, scale=W:H:force_original_aspect_ratio=decrease, pad=W:H:(ow-iw)/2:(oh-ih)/2,
+      setsar=1, fps=F, format=yuv420p, <efectos>, tpad=stop_mode=clone:stop_duration=1, trim=end_frame=N0 [s0];
+color=c=black:s=WxH:r=F, format=yuv420p, setsar=1, trim=end_frame=N1 [s1];          # hueco
+[s0][s1][s2] concat=n=3:v=1:a=0, setpts=PTS+T0/TB [vt0];                             # pista completa
+[vt0][vt1] overlay=0:0:eof_action=pass [vout];   # pistas superiores (PiP, fase 8) encima de V1
+
+# Audio: cada pista también es un concat (audio vinculado de V1, pistas A1, A2...):
+[in1] atrim=start=IN:end=OUT, asetpts=PTS-STARTPTS, aresample=48000,
+      aformat=sample_fmts=fltp:channel_layouts=stereo, apad=whole_dur=D, atrim=duration=D [sa0];
+anullsrc=r=48000:cl=stereo, aformat=..., atrim=duration=G [sa1];                    # silencio
+[sa0][sa1] concat=n=2:v=0:a=1 [at0];
+[at0][at1] amix=inputs=2:duration=longest:normalize=0, asetpts=PTS+T0/TB,
+      aformat=sample_fmts=flt:sample_rates=48000:channel_layouts=stereo [aout]
 ```
 
-- Todos los `pts` están en **tiempo absoluto del timeline**. Así, `fade` y los `offset` de xfade no dependen del punto de arranque.
-- Cada pista de video se divide en **segmentos**, que son cadenas de clips unidos por transiciones. Cada segmento se superpone (`overlay ... eof_action=pass`) sobre la composición acumulada, de abajo hacia arriba. V1 se dibuja en (0,0) a lienzo completo. Las pistas superiores aplican `PipTransform`, y `overlay` recorta lo que queda fuera del lienzo.
+- **Una pista = un `concat`** de segmentos que cubren desde `T0` hasta el final del timeline (los huecos son `color` negro o `anullsrc`). Se descartó superponer cada clip con su propio `overlay` sobre un fondo: `overlay` necesita el primer cuadro de *todas* sus entradas desde el arranque, así que todos los clips del timeline se decodificarían a la vez. `concat` pide datos solo al segmento actual, de modo que en cada pista hay **un único decoder activo** a la vez.
+- Los límites de los segmentos de video se cuantizan a la rejilla de cuadros del proyecto (`round(t·F)`), así los segmentos encajan sin acumular error; `tpad`+`trim=end_frame` garantizan el número exacto de cuadros aunque la fuente termine antes. El audio usa tiempos exactos (precisión de muestra), con lo que la desincronía máxima es de medio cuadro y no se acumula.
+- Los `pts` dentro de cada segmento empiezan en 0 (efectos como `fade` usan tiempos relativos al clip) y al final cada pista se lleva a **tiempo absoluto del timeline** con `setpts=PTS+T0/TB`.
+- Las transiciones (fase 7) unen dos segmentos consecutivos con `xfade`/`acrossfade` antes del `concat`; las pistas superiores (fase 8) se componen sobre V1 con `overlay`.
 - **Efectos**: escala de grises → `hue=s=0`; brillo/contraste → `lutyuv=y='clip((val-128)*C+128+B*255,0,255)'`, porque `eq` no está; desenfoque → `gblur=sigma=r`, porque `boxblur` no está; fade → `fade=t=in|out` (solo video, según la spec).
-- **Arranque en T (seek)**: los clips que terminan antes de T se omiten. Los que cruzan T arrancan con `sourceIn' = sourceIn + (T - start)`. Si T cae dentro de una transición, `T0` retrocede al inicio de la transición y los cuadros con pts < T se descartan a la salida.
+- **Arranque en T (seek)**: `T0` es T alineado hacia abajo a la rejilla de cuadros. Los clips que terminan antes de `T0` se omiten. Los que cruzan `T0` arrancan con `sourceIn' = sourceIn + (T0 - start)`. Si T cae dentro de una transición, `T0` retrocede al inicio de la transición y los cuadros con pts < T se descartan a la salida. El builder acepta además un instante final opcional: para mostrar un único cuadro en pausa solo se incluyen los clips de ese instante.
 - **Ventaja didáctica y de depuración**: la cadena se registra en el log y los tests unitarios la comparan sin necesidad de FFmpeg.
 
 Se consideró y descartó un *compositor por cuadro* hecho a mano (decodificar cada clip y mezclar píxeles en C++), porque no usa xfade ni acrossfade como pide la consigna y duplica lo que ya hace libavfilter. También se descartaron los filtros fuente `movie`/`amovie` dentro del grafo: ocultan la decodificación, que es parte del aprendizaje, y empeoran los mensajes de error.

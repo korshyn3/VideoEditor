@@ -5,9 +5,10 @@
 // por eso los headers van dentro de extern "C" (si no, el enlazador buscaría nombres
 // "decorados" de C++ que no existen en las DLLs).
 //
-// Regla de la arquitectura: este header solo se incluye desde archivos .cpp del engine.
-// Los headers PÚBLICOS del engine (los que ven el Controller y los tests) no exponen
-// tipos de FFmpeg; por eso EditorController compila sin tener FFmpeg en su ruta de includes.
+// Regla de la arquitectura: este header solo se incluye desde el engine (sus .cpp y sus
+// headers INTERNOS, como MediaDecoder.h y GraphRunner.h). Los headers PÚBLICOS del engine
+// (MediaProbe.h, FilterGraphBuilder.h, PlaybackEngine.h...), que ve el Controller, no
+// exponen tipos de FFmpeg; por eso EditorController compila sin FFmpeg en su ruta de includes.
 #pragma once
 
 extern "C" {

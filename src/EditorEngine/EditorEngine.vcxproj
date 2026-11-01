@@ -62,13 +62,23 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AudioOutput.h" />
     <ClInclude Include="FFmpegError.h" />
+    <ClInclude Include="FilterGraphBuilder.h" />
+    <ClInclude Include="GraphRunner.h" />
+    <ClInclude Include="MediaDecoder.h" />
     <ClInclude Include="MediaProbe.h" />
+    <ClInclude Include="PlaybackEngine.h" />
     <ClInclude Include="ffmpeg_includes.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AudioOutput.cpp" />
     <ClCompile Include="FFmpegError.cpp" />
+    <ClCompile Include="FilterGraphBuilder.cpp" />
+    <ClCompile Include="GraphRunner.cpp" />
+    <ClCompile Include="MediaDecoder.cpp" />
     <ClCompile Include="MediaProbe.cpp" />
+    <ClCompile Include="PlaybackEngine.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EditorModel\EditorModel.vcxproj">

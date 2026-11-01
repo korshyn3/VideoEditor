@@ -28,6 +28,9 @@ $medios = [ordered]@{
     'tono.wav'        = '-f lavfi -i sine=frequency=660:sample_rate=44100:duration=3 -c:a pcm_s16le'
     'tono.aac'        = '-f lavfi -i sine=frequency=550:sample_rate=48000:duration=3 -c:a aac -b:a 128k'
     'tono.mp3'        = '-f lavfi -i sine=frequency=330:sample_rate=44100:duration=3 -c:a mp3_mf -b:a 128k'
+    # Prueba de sincronía (10 s): cada segundo, un destello blanco y un pitido A LA VEZ.
+    # En el preview, el pitido debe oírse exactamente cuando la pantalla se pone blanca.
+    'sincronia.mp4'   = '-f lavfi -i "color=c=black:s=320x240:r=25:d=10,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable=lt(mod(t\,1)\,0.08)" -f lavfi -i "aevalsrc=if(lt(mod(t\,1)\,0.08)\,0.8*sin(2*PI*1000*t)\,0):s=48000:d=10" -c:v mpeg4 -q:v 5 -c:a aac -b:a 128k'
 }
 
 foreach ($nombre in $medios.Keys) {

@@ -68,6 +68,20 @@ void CTimelineWnd::Refrescar() {
     Invalidate(FALSE);
 }
 
+void CTimelineWnd::SeguirCursor() {
+    if (!m_ctrl || !GetSafeHwnd()) return;
+    CRect rc;
+    GetClientRect(&rc);
+    const int x = m_escala.tiempoAX(m_ctrl->playhead());
+    if (x < kAnchoCabecera || x > rc.right - 20) {
+        // El cursor queda a un cuarto del ancho visible.
+        const int visible = rc.Width() - kAnchoCabecera;
+        m_escala.setScrollPx(m_escala.anchoContenido(m_ctrl->playhead()) - visible / 4);
+        ActualizarScroll();
+    }
+    Invalidate(FALSE);
+}
+
 // ---------------------------------------------------------------------------
 // Geometría
 // ---------------------------------------------------------------------------

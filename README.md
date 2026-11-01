@@ -32,6 +32,30 @@ Ejecuta el proyecto **EditorTests** (o `bin\Debug\EditorTests.exe`). Antes de co
 faltan en `bin\<Configuración>\medios_prueba\`. `EditorTests.exe --help` muestra cómo filtrar
 tests.
 
+### Ver (y probar) el grafo de filtros
+
+El preview y la exportación usan una cadena de filtros de libavfilter con la misma sintaxis
+que `ffmpeg -filter_complex` (ver `FilterGraphBuilder`). Para ver la que se genera para un
+timeline de ejemplo:
+
+```
+bin\Debug\EditorTests.exe -tc="Imprimir grafo de ejemplo" --no-skip
+```
+
+Para ejecutarla con la línea de comandos de FFmpeg, guarda la cadena en un archivo,
+reemplaza cada entrada `[inN]` por el stream del archivo correspondiente (`[0:v]`, `[0:a]`,
+`[1:v]`...) y usa `-/filter_complex` (en FFmpeg 9 reemplaza a `-filter_complex_script`):
+
+```
+ffmpeg -i a.mp4 -i b.mp4 -/filter_complex grafo.txt -map "[vout]" -map "[aout]" salida.mp4
+```
+
+### Prueba de sincronía audio/video
+
+`bin\Debug\medios_prueba\sincronia.mp4` muestra un destello blanco y emite un pitido al
+mismo tiempo, una vez por segundo. Al importarlo y reproducirlo en el editor, el pitido
+debe oírse justo cuando la pantalla se pone blanca.
+
 ## Arquitectura: capas y dependencias
 
 ```

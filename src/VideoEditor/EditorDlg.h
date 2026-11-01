@@ -36,6 +36,10 @@ protected:
     virtual void OnCancel() {}
 
     afx_msg void OnClose();
+    afx_msg void OnDestroy();
+    afx_msg void OnTimer(UINT_PTR nIDEvent);
+    afx_msg void OnReproducir();
+    afx_msg LRESULT OnPreviewAviso(WPARAM wParam, LPARAM lParam);
     afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
     afx_msg void OnImportar();
@@ -53,6 +57,14 @@ private:
     void ActualizarPropiedades();
     void ColocarPanelPropiedades();
     void MostrarResultado(const model::OpResult& r);
+    // El modelo cambió: el preview se actualiza 100 ms después del ÚLTIMO cambio
+    // (SetTimer con el mismo id reinicia la cuenta), así se agrupan los cambios seguidos.
+    void ProgramarSincronizacion();
+    // Trae del controller el cuadro que toca mostrar y actualiza cursor y botones.
+    void ActualizarReproduccion();
+
+    static constexpr UINT_PTR kTimerReproduccion = 1;  // ~60 Hz mientras se reproduce
+    static constexpr UINT_PTR kTimerSincronizar = 2;   // debounce de cambios del modelo
 
     controller::EditorController& m_controller;
     HACCEL m_aceleradores = nullptr;
