@@ -44,6 +44,25 @@ std::string Project::nextTrackName(TrackKind kind) const {
     return std::string(1, prefijo) + std::to_string(mayor + 1);
 }
 
+Clip* Project::findClipMut(Id clipId, Track** pista) {
+    for (Track& t : timeline_.tracks) {
+        for (Clip& c : t.clips) {
+            if (c.id == clipId) {
+                if (pista) *pista = &t;
+                return &c;
+            }
+        }
+    }
+    return nullptr;
+}
+
+TimeUs Project::frameDuration() const {
+    // 1 cuadro = den/num segundos, redondeado a microsegundos (como mínimo 1 µs).
+    const Rational& f = canvas_.fps;
+    if (!f.valido()) return kMicrosPorSegundo / 30;
+    return std::max<TimeUs>(1, (kMicrosPorSegundo * f.den + f.num / 2) / f.num);
+}
+
 bool Project::overlaps(const Track& track, TimeUs start, TimeUs end, Id ignorar) {
     for (const Clip& c : track.clips) {
         if (c.id == ignorar) continue;
@@ -148,6 +167,80 @@ OpResult Project::moveClip(Id clipId, Id destTrackId, TimeUs newStart) {
     std::erase_if(origenMut->clips, [clipId](const Clip& c) { return c.id == clipId; });
     destino->clips.push_back(copia);
     sortClips(*destino);
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::split(Id clipId, TimeUs t, Id* clipDerecho) {
+    Track* track = nullptr;
+    Clip* clip = findClipMut(clipId, &track);
+    if (!clip) return OpResult::fallo("El clip no existe.");
+    // Estrictamente dentro: en un borde (o fuera) no hay nada que dividir.
+    if (t <= clip->timelineStart || t >= clip->timelineEnd())
+        return OpResult::fallo("El cursor no está dentro del clip seleccionado.");
+
+    // El punto de corte en la fuente se calcula con la misma distancia que en el timeline
+    // (enteros: las dos mitades suman exactamente el tramo original).
+    const TimeUs corteFuente = clip->sourceIn + (t - clip->timelineStart);
+
+    Clip derecho = *clip;  // copia medio, efectos, audio vinculado y transformación PiP
+    derecho.id = newId();
+    derecho.sourceIn = corteFuente;
+    derecho.timelineStart = t;
+    clip->sourceOut = corteFuente;
+
+    // Una transición que salía del clip original ahora sale de su parte derecha.
+    for (Transition& tr : track->transitions)
+        if (tr.fromClipId == clipId) tr.fromClipId = derecho.id;
+
+    track->clips.push_back(derecho);
+    sortClips(*track);
+    if (clipDerecho) *clipDerecho = derecho.id;
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::trimClip(Id clipId, TimeUs newIn, TimeUs newOut) {
+    Track* track = nullptr;
+    Clip* clip = findClipMut(clipId, &track);
+    if (!clip) return OpResult::fallo("El clip no existe.");
+    const MediaInfo* info = media_.find(clip->mediaId);
+    const TimeUs duracionFuente = info ? info->duration : clip->sourceOut;
+
+    // Límites de la fuente; además el clip no puede empezar antes de 0 en el timeline.
+    const TimeUs minIn = std::max<TimeUs>(0, clip->sourceIn - clip->timelineStart);
+    newIn = std::clamp<TimeUs>(newIn, minIn, duracionFuente);
+    newOut = std::clamp<TimeUs>(newOut, 0, duracionFuente);
+    if (newOut - newIn < frameDuration())
+        return OpResult::fallo("El clip debe durar al menos un cuadro.");
+
+    const TimeUs newStart = clip->timelineStart + (newIn - clip->sourceIn);
+    if (overlaps(*track, newStart, newStart + (newOut - newIn), clipId))
+        return OpResult::fallo("El recorte haría que el clip se solape con un clip vecino.");
+
+    clip->sourceIn = newIn;
+    clip->sourceOut = newOut;
+    clip->timelineStart = newStart;
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::removeClip(Id clipId, bool ripple) {
+    Track* track = nullptr;
+    const Clip* clip = findClipMut(clipId, &track);
+    if (!clip) return OpResult::fallo("El clip no existe.");
+    const TimeUs fin = clip->timelineEnd();
+    const TimeUs duracion = clip->duration();
+
+    std::erase_if(track->transitions,
+                  [clipId](const Transition& tr) { return tr.fromClipId == clipId || tr.toClipId == clipId; });
+    std::erase_if(track->clips, [clipId](const Clip& c) { return c.id == clipId; });  // clip queda inválido
+
+    if (ripple) {
+        // Solo los clips que empiezan después del eliminado (en la misma pista).
+        for (Clip& c : track->clips)
+            if (c.timelineStart >= fin) c.timelineStart -= duracion;
+    }
     touch();
     return OpResult::exito();
 }

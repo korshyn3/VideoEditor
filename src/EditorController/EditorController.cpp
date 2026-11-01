@@ -67,6 +67,24 @@ model::OpResult EditorController::moveClip(model::Id clipId, model::Id destTrack
     return r;
 }
 
+model::OpResult EditorController::splitAtPlayhead() {
+    if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    return project_.split(seleccion_.clipId, playhead_);
+}
+
+model::OpResult EditorController::trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut) {
+    model::OpResult r = project_.trimClip(clipId, newIn, newOut);
+    if (r.ok) seleccionarClip(clipId);
+    return r;
+}
+
+model::OpResult EditorController::deleteSelectedClip(bool ripple) {
+    if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    model::OpResult r = project_.removeClip(seleccion_.clipId, ripple);
+    validarSeleccion();
+    return r;
+}
+
 void EditorController::seleccionarPista(model::Id trackId) {
     if (project_.timeline().findTrack(trackId)) {
         seleccion_.trackId = trackId;

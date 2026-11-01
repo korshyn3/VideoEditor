@@ -2,9 +2,11 @@
 // Capa: VIEW (MFC). Ver TimelineWnd.h.
 #include "TimelineWnd.h"
 #include "MensajesApp.h"
+#include "resource.h"
 #include "Utf8.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 
@@ -48,6 +50,8 @@ BEGIN_MESSAGE_MAP(CTimelineWnd, CWnd)
     ON_WM_MOUSEMOVE()
     ON_WM_LBUTTONUP()
     ON_WM_CAPTURECHANGED()
+    ON_WM_RBUTTONDOWN()
+    ON_WM_SETCURSOR()
     ON_WM_MOUSEWHEEL()
     ON_WM_HSCROLL()
 END_MESSAGE_MAP()
@@ -130,6 +134,61 @@ const model::Clip* CTimelineWnd::ClipEn(CPoint p, int* filaOut) const {
     return nullptr;
 }
 
+const model::Clip* CTimelineWnd::BordeEn(CPoint p, bool* inicio) const {
+    if (p.x < kAnchoCabecera) return nullptr;
+    const int fila = FilaEnY(p.y);
+    if (fila < 0) return nullptr;
+    // Cada borde "atrapa" kAnchoBorde px hacia dentro del clip: si dos clips se tocan, a
+    // la izquierda de la unión se toma el final del primero y a la derecha el inicio del
+    // segundo.
+    for (const model::Clip& c : PistasVisuales()[fila]->clips) {
+        const CRect r = RectClip(fila, c);
+        if (p.y < r.top || p.y >= r.bottom) continue;
+        if (p.x >= r.left && p.x < r.left + kAnchoBorde) {
+            *inicio = true;
+            return &c;
+        }
+        if (p.x < r.right && p.x >= r.right - kAnchoBorde) {
+            *inicio = false;
+            return &c;
+        }
+    }
+    return nullptr;
+}
+
+void CTimelineWnd::CalcularTrim(int dx) {
+    const model::Project& proyecto = m_ctrl->project();
+    const model::Track* pista = nullptr;
+    const model::Clip* clip = proyecto.timeline().findClip(m_clipArrastrado, &pista);
+    if (!clip) return;
+    const model::MediaInfo* info = proyecto.media().find(clip->mediaId);
+    const model::TimeUs duracionFuente = info ? info->duration : clip->sourceOut;
+    const model::TimeUs cuadro = proyecto.frameDuration();
+    const model::TimeUs delta = m_escala.pxADuracion(dx);
+
+    // Vecinos en la misma pista: fin del anterior e inicio del siguiente.
+    model::TimeUs finAnterior = 0;
+    model::TimeUs inicioSiguiente = INT64_MAX;
+    for (const model::Clip& c : pista->clips) {
+        if (c.id == clip->id) continue;
+        if (c.timelineEnd() <= clip->timelineStart) finAnterior = std::max(finAnterior, c.timelineEnd());
+        if (c.timelineStart >= clip->timelineEnd()) inicioSiguiente = std::min(inicioSiguiente, c.timelineStart);
+    }
+
+    m_trimIn = clip->sourceIn;
+    m_trimOut = clip->sourceOut;
+    if (m_arrastre == Arrastre::BordeInicio) {
+        // El inicio en el timeline se mueve igual que la entrada en la fuente.
+        const model::TimeUs minimo = std::max<model::TimeUs>(0, clip->sourceIn - (clip->timelineStart - finAnterior));
+        m_trimIn = std::clamp(clip->sourceIn + delta, minimo, std::max(minimo, clip->sourceOut - cuadro));
+    } else {
+        model::TimeUs maximo = duracionFuente;
+        if (inicioSiguiente != INT64_MAX)
+            maximo = std::min(maximo, clip->sourceOut + (inicioSiguiente - clip->timelineEnd()));
+        m_trimOut = std::clamp(clip->sourceOut + delta, clip->sourceIn + cuadro, std::max(maximo, clip->sourceIn + cuadro));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Dibujo (con doble buffer: se dibuja en un bitmap en memoria y se copia de una vez)
 // ---------------------------------------------------------------------------
@@ -196,14 +255,22 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         dc.DrawText(nombre, txt, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     }
 
-    // Fantasma del clip que se está arrastrando.
-    if (m_arrastre == Arrastre::Clip && m_seMovio) {
-        const model::Clip* c = m_ctrl->project().timeline().findClip(m_clipArrastrado);
-        for (int i = 0; c && i < static_cast<int>(filas.size()); ++i) {
-            if (filas[i]->id != m_pistaFantasma) continue;
+    // Fantasma del clip que se está arrastrando (movimiento o trim).
+    const model::Track* pistaClip = nullptr;
+    const model::Clip* c = m_seMovio ? m_ctrl->project().timeline().findClip(m_clipArrastrado, &pistaClip) : nullptr;
+    if (c && m_arrastre != Arrastre::Nada && m_arrastre != Arrastre::Cursor) {
+        model::TimeUs inicio = m_inicioFantasma;
+        model::TimeUs fin = m_inicioFantasma + c->duration();
+        model::Id pistaFantasma = m_pistaFantasma;
+        if (m_arrastre != Arrastre::Clip) {
+            inicio = c->timelineStart + (m_trimIn - c->sourceIn);
+            fin = inicio + (m_trimOut - m_trimIn);
+            pistaFantasma = pistaClip->id;
+        }
+        for (int i = 0; i < static_cast<int>(filas.size()); ++i) {
+            if (filas[i]->id != pistaFantasma) continue;
             const CRect f = RectFila(i);
-            CRect g(m_escala.tiempoAX(m_inicioFantasma), f.top + 3,
-                    m_escala.tiempoAX(m_inicioFantasma + c->duration()), f.bottom - 3);
+            CRect g(m_escala.tiempoAX(inicio), f.top + 3, m_escala.tiempoAX(fin), f.bottom - 3);
             CPen pen(PS_DOT, 1, RGB(255, 255, 255));
             CPen* penAnterior = dc.SelectObject(&pen);
             CBrush* brochaAnterior = static_cast<CBrush*>(dc.SelectStockObject(NULL_BRUSH));
@@ -381,7 +448,20 @@ void CTimelineWnd::OnLButtonDown(UINT /*nFlags*/, CPoint point) {
         return;
     }
 
-    // 3) Clip: lo selecciona y prepara un posible arrastre.
+    // 3) Borde de un clip: lo selecciona y prepara un posible trim.
+    bool bordeInicio = false;
+    if (const model::Clip* clip = BordeEn(point, &bordeInicio)) {
+        m_ctrl->seleccionarClip(clip->id);
+        m_arrastre = bordeInicio ? Arrastre::BordeInicio : Arrastre::BordeFin;
+        m_clipArrastrado = clip->id;
+        m_trimIn = clip->sourceIn;
+        m_trimOut = clip->sourceOut;
+        SetCapture();
+        NotificarCambio(false);
+        return;
+    }
+
+    // 4) Clip: lo selecciona y prepara un posible arrastre.
     if (const model::Clip* clip = ClipEn(point, nullptr)) {
         m_ctrl->seleccionarClip(clip->id);
         m_arrastre = Arrastre::Clip;
@@ -394,7 +474,7 @@ void CTimelineWnd::OnLButtonDown(UINT /*nFlags*/, CPoint point) {
         return;
     }
 
-    // 4) Zona vacía de una pista: selecciona la pista y mueve el cursor allí.
+    // 5) Zona vacía de una pista: selecciona la pista y mueve el cursor allí.
     m_ctrl->seleccionarPista(pista->id);
     MoverCursorA(point.x);
     NotificarCambio(false);
@@ -414,6 +494,12 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
         std::abs(point.y - m_puntoInicio.y) < kUmbralArrastre)
         return;
     m_seMovio = true;
+
+    if (m_arrastre == Arrastre::BordeInicio || m_arrastre == Arrastre::BordeFin) {
+        CalcularTrim(point.x - m_puntoInicio.x);
+        Invalidate(FALSE);
+        return;
+    }
 
     m_inicioFantasma = std::max<model::TimeUs>(0, m_inicioOriginal + m_escala.pxADuracion(point.x - m_puntoInicio.x));
 
@@ -439,6 +525,11 @@ void CTimelineWnd::OnLButtonUp(UINT /*nFlags*/, CPoint /*point*/) {
         const model::OpResult r = m_ctrl->moveClip(m_clipArrastrado, m_pistaFantasma, m_inicioFantasma);
         if (!r.ok) MessageBeep(MB_ICONWARNING);
         NotificarCambio(r.ok);
+    } else if ((arrastre == Arrastre::BordeInicio || arrastre == Arrastre::BordeFin) && m_seMovio && m_ctrl) {
+        // El fantasma ya respetaba los límites; el modelo vuelve a validar.
+        const model::OpResult r = m_ctrl->trimClip(m_clipArrastrado, m_trimIn, m_trimOut);
+        if (!r.ok) MessageBeep(MB_ICONWARNING);
+        NotificarCambio(r.ok);
     }
     m_seMovio = false;
     Invalidate(FALSE);
@@ -452,4 +543,37 @@ void CTimelineWnd::OnCaptureChanged(CWnd* pWnd) {
         Invalidate(FALSE);
     }
     CWnd::OnCaptureChanged(pWnd);
+}
+
+BOOL CTimelineWnd::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message) {
+    // Cursor de redimensionar sobre los bordes de los clips (y durante el trim).
+    if (nHitTest == HTCLIENT && m_ctrl) {
+        CPoint p;
+        ::GetCursorPos(&p);
+        ScreenToClient(&p);
+        bool inicio = false;
+        if (m_arrastre == Arrastre::BordeInicio || m_arrastre == Arrastre::BordeFin ||
+            (m_arrastre == Arrastre::Nada && BordeEn(p, &inicio))) {
+            ::SetCursor(::LoadCursor(nullptr, IDC_SIZEWE));
+            return TRUE;
+        }
+    }
+    return CWnd::OnSetCursor(pWnd, nHitTest, message);
+}
+
+void CTimelineWnd::OnRButtonDown(UINT /*nFlags*/, CPoint point) {
+    SetFocus();
+    if (!m_ctrl || m_arrastre != Arrastre::Nada) return;
+    const model::Clip* clip = ClipEn(point, nullptr);
+    if (!clip) return;
+    m_ctrl->seleccionarClip(clip->id);
+    NotificarCambio(false);
+
+    // Menú contextual del .rc. Su dueño es la ventana padre: los comandos (Dividir,
+    // Eliminar...) le llegan como WM_COMMAND, igual que desde el menú Editar.
+    CMenu menu;
+    if (!menu.LoadMenu(IDR_MENU_CONTEXTO_CLIP)) return;
+    CMenu* popup = menu.GetSubMenu(0);
+    ClientToScreen(&point);
+    popup->TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, point.x, point.y, GetParent());
 }

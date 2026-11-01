@@ -11,6 +11,10 @@
 //   | A1       |   [clip de audio]                        |   <- pistas de audio
 //   +----------+------------------------------------------+
 //
+// Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
+// arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
+// un clip = menú contextual (dividir / eliminar), cuyos comandos llegan a la ventana padre.
+//
 // Regla MVC: lee el proyecto a través del controller (solo lectura) y pide los cambios
 // (seleccionar, mover clip, mover cursor) al controller. Después avisa a la ventana padre
 // con WM_APP_VISTA_CAMBIO para que actualice el resto de la interfaz.
@@ -47,6 +51,8 @@ protected:
     afx_msg void OnMouseMove(UINT nFlags, CPoint point);
     afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
     afx_msg void OnCaptureChanged(CWnd* pWnd);
+    afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
+    afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message);
     afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
     afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
     DECLARE_MESSAGE_MAP()
@@ -56,8 +62,9 @@ private:
     static constexpr int kAltoRegla = 24;
     static constexpr int kAltoPista = 48;
     static constexpr int kUmbralArrastre = 4;  // px antes de considerar que es un arrastre
+    static constexpr int kAnchoBorde = 5;      // px a cada lado del borde de un clip para el trim
 
-    enum class Arrastre { Nada, Cursor, Clip };
+    enum class Arrastre { Nada, Cursor, Clip, BordeInicio, BordeFin };
 
     // Pistas en el orden en que se dibujan de arriba a abajo: video de la más alta a V1,
     // después las de audio.
@@ -68,6 +75,12 @@ private:
     CRect RectClip(int fila, const model::Clip& clip) const;
     // Clip bajo el punto (o nullptr) y la fila en que está.
     const model::Clip* ClipEn(CPoint p, int* fila) const;
+    // Si el punto está sobre el borde izquierdo o derecho de un clip, devuelve ese clip y
+    // en `inicio` qué borde es (true = izquierdo).
+    const model::Clip* BordeEn(CPoint p, bool* inicio) const;
+    // Tramo propuesto [in, out) de la fuente al arrastrar un borde dx píxeles, limitado a
+    // la fuente, a los clips vecinos y a un cuadro como mínimo.
+    void CalcularTrim(int dx);
 
     void Dibujar(CDC& dc, const CRect& rc);
     void DibujarRegla(CDC& dc, const CRect& rc);
@@ -88,4 +101,6 @@ private:
     model::TimeUs m_inicioOriginal = 0;
     model::TimeUs m_inicioFantasma = 0;      // posición propuesta durante el arrastre
     model::Id m_pistaFantasma = model::kSinId;
+    model::TimeUs m_trimIn = 0;   // tramo propuesto durante un trim
+    model::TimeUs m_trimOut = 0;
 };

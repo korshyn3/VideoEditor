@@ -55,6 +55,14 @@ public:
     model::OpResult removeTrack(model::Id trackId);
     model::OpResult moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart);
 
+    // Divide el clip seleccionado en la posición del cursor. La selección queda en la
+    // parte izquierda.
+    model::OpResult splitAtPlayhead();
+    // Recorta un clip: nuevo tramo [newIn, newOut) de la fuente (ver Project::trimClip).
+    model::OpResult trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut);
+    // Elimina el clip seleccionado, dejando un hueco o cerrándolo (ripple).
+    model::OpResult deleteSelectedClip(bool ripple);
+
     // ---- Selección y cursor -------------------------------------------------
     void seleccionarPista(model::Id trackId);
     // Selecciona el clip y también su pista.

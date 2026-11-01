@@ -55,6 +55,10 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_COMMAND(ID_PISTAS_AGREGAR_VIDEO, &CEditorDlg::OnAgregarPistaVideo)
     ON_COMMAND(ID_PISTAS_AGREGAR_AUDIO, &CEditorDlg::OnAgregarPistaAudio)
     ON_COMMAND(ID_PISTAS_ELIMINAR, &CEditorDlg::OnEliminarPista)
+    ON_BN_CLICKED(IDC_BTN_SPLIT, &CEditorDlg::OnDividir)
+    ON_COMMAND(ID_EDITAR_DIVIDIR, &CEditorDlg::OnDividir)
+    ON_COMMAND(ID_EDITAR_ELIMINAR, &CEditorDlg::OnEliminarClip)
+    ON_COMMAND(ID_EDITAR_ELIMINAR_RIPPLE, &CEditorDlg::OnEliminarClipRipple)
     ON_COMMAND(ID_AYUDA_ACERCA, &CEditorDlg::OnAcercaDe)
     ON_MESSAGE(WM_APP_VISTA_CAMBIO, &CEditorDlg::OnVistaCambio)
 END_MESSAGE_MAP()
@@ -78,9 +82,11 @@ BOOL CEditorDlg::OnInitDialog() {
     m_timeline.SubclassDlgItem(IDC_TIMELINE, this);
     m_timeline.SetController(&m_controller);
 
-    // Panel de propiedades: diálogo hijo colocado dentro del grupo "Propiedades".
+    // Panel de propiedades: diálogos hijos colocados dentro del grupo "Propiedades"; se
+    // muestra uno u otro según la selección (ActualizarPropiedades).
     m_panelMedio.Create(IDD_PROP_MEDIO, this);
-    m_panelMedio.ShowWindow(SW_SHOW);
+    m_panelClip.Create(IDD_PROP_CLIP, this);
+    m_panelClip.SetController(&m_controller);
 
     // El tamaño de diseño es el mínimo: más chico, los controles se encimarían.
     CRect rc;
@@ -144,12 +150,13 @@ void CEditorDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI) {
 
 void CEditorDlg::ColocarPanelPropiedades() {
     CWnd* grupo = GetDlgItem(IDC_GRUPO_PROPIEDADES);
-    if (!grupo || !m_panelMedio.GetSafeHwnd()) return;
+    if (!grupo || !m_panelMedio.GetSafeHwnd() || !m_panelClip.GetSafeHwnd()) return;
     CRect rc;
     grupo->GetWindowRect(&rc);
     ScreenToClient(&rc);
     rc.DeflateRect(8, 20, 8, 8);  // dejar visible el borde y el título del grupo
     m_panelMedio.SetWindowPos(&wndTop, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOACTIVATE);
+    m_panelClip.SetWindowPos(&wndTop, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOACTIVATE);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,15 +214,31 @@ void CEditorDlg::OnEliminarPista() {
     MostrarResultado(m_controller.removeTrack(pista->id));
 }
 
+void CEditorDlg::OnDividir() {
+    ResultadoSilencioso(m_controller.splitAtPlayhead());
+}
+
+void CEditorDlg::OnEliminarClip() {
+    ResultadoSilencioso(m_controller.deleteSelectedClip(false));
+}
+
+void CEditorDlg::OnEliminarClipRipple() {
+    ResultadoSilencioso(m_controller.deleteSelectedClip(true));
+}
+
 void CEditorDlg::OnAcercaDe() {
     AfxMessageBox(L"Editor de video\r\nProyecto académico: C++20, MFC y FFmpeg (arquitectura MVC).",
                   MB_ICONINFORMATION);
 }
 
 LRESULT CEditorDlg::OnVistaCambio(WPARAM wParam, LPARAM) {
-    // El timeline ya se redibujó; se actualiza el resto de la interfaz.
+    // Lo envían el timeline (que ya se redibujó) o el panel de clip (trim por valores,
+    // que sí necesita redibujar el timeline).
+    if (wParam) {
+        m_timeline.Refrescar();
+        ProgramarSincronizacion();
+    }
     ActualizarPropiedades();
-    if (wParam) ProgramarSincronizacion();
     return 0;
 }
 
@@ -223,6 +246,15 @@ void CEditorDlg::MostrarResultado(const model::OpResult& r) {
     RefrescarVista();
     ProgramarSincronizacion();
     if (!r.ok) AfxMessageBox(CStringDesdeUtf8(r.error), MB_ICONWARNING);
+}
+
+void CEditorDlg::ResultadoSilencioso(const model::OpResult& r) {
+    if (!r.ok) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    RefrescarVista();
+    ProgramarSincronizacion();
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +324,9 @@ void CEditorDlg::ActualizarPropiedades() {
 
     CString t;
     const model::Track* pista = nullptr;
-    if (const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista)) {
+    const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista);
+    GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(clip != nullptr);
+    if (clip) {
         t += L"CLIP (pista " + CStringDesdeUtf8(pista->name) + L")\r\n";
         t += L"Posición: " + TextoTiempo(clip->timelineStart) + L" → " + TextoTiempo(clip->timelineEnd()) + L"\r\n";
         t += L"Tramo de la fuente: " + TextoTiempo(clip->sourceIn) + L" → " + TextoTiempo(clip->sourceOut) + L"\r\n";
@@ -314,5 +348,14 @@ void CEditorDlg::ActualizarPropiedades() {
                     p.canvas().height, p.canvas().fps.toDouble(), TextoTiempo(p.timeline().duration()).GetString());
     t += proyecto;
 
-    m_panelMedio.MostrarTexto(t);
+    // Con un clip seleccionado se muestra el panel de clip (con entrada/salida editables).
+    if (clip) {
+        m_panelClip.MostrarClip(*clip, t);
+        m_panelMedio.ShowWindow(SW_HIDE);
+        m_panelClip.ShowWindow(SW_SHOW);
+    } else {
+        m_panelMedio.MostrarTexto(t);
+        m_panelClip.ShowWindow(SW_HIDE);
+        m_panelMedio.ShowWindow(SW_SHOW);
+    }
 }

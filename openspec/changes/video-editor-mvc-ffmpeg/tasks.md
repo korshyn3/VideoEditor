@@ -36,7 +36,7 @@
 - [ ] 4.1 Implementar `split` en el modelo y la acción "Dividir en cursor" (botón, menú Editar y tecla S); verificar con tests "Split en el medio", "Cursor fuera del clip" y "Split conserva el audio vinculado"
 - [ ] 4.2 Implementar `trim` (in/out con límites de fuente, mínimo 1 cuadro, sin solapar vecinos) por arrastre de bordes en `CTimelineWnd` (cursor de redimensionar) y por valores en `IDD_PROP_CLIP`; verificar con tests "Recortar el inicio" y "Extender más allá de la fuente"
 - [ ] 4.3 Implementar eliminar clip normal y con ripple (menú, menú contextual y teclas Supr / Shift+Supr); verificar con tests "Eliminar dejando hueco", "Eliminar con ripple" y "Eliminar un segmento intermedio", y en el preview que el hueco se ve negro y en silencio
-- [ ] 4.4 Agregar un test de no destructividad que guarda hash y fecha de modificación de los medios de prueba antes y después de editar; verificar que no cambian (escenario "Edición no destructiva")
+- [x] 4.4 Agregar un test de no destructividad que guarda hash y fecha de modificación de los medios de prueba antes y después de editar; verificar que no cambian (escenario "Edición no destructiva")
 
 ## 5. Fase 5 — Pistas de audio (separar / agregar)
 

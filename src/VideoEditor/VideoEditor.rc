@@ -57,6 +57,13 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Salir",                      ID_ARCHIVO_SALIR
     END
+    POPUP "&Editar"
+    BEGIN
+        MENUITEM "&Dividir en el cursor	S",   ID_EDITAR_DIVIDIR
+        MENUITEM SEPARATOR
+        MENUITEM "&Eliminar clip	Supr",       ID_EDITAR_ELIMINAR
+        MENUITEM "Eliminar clip y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
+    END
     POPUP "&Reproducción"
     BEGIN
         MENUITEM "Reproducir / &Pausa	Espacio", ID_REPRODUCIR_PLAY
@@ -74,6 +81,17 @@ BEGIN
     END
 END
 
+IDR_MENU_CONTEXTO_CLIP MENU
+BEGIN
+    POPUP "Clip"
+    BEGIN
+        MENUITEM "&Dividir en el cursor	S",   ID_EDITAR_DIVIDIR
+        MENUITEM SEPARATOR
+        MENUITEM "&Eliminar	Supr",            ID_EDITAR_ELIMINAR
+        MENUITEM "Eliminar y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
+    END
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -84,6 +102,9 @@ IDR_ACCEL_PRINCIPAL ACCELERATORS
 BEGIN
     "I",            ID_ARCHIVO_IMPORTAR,    VIRTKEY, CONTROL, NOINVERT
     VK_SPACE,       ID_REPRODUCIR_PLAY,     VIRTKEY, NOINVERT
+    "S",            ID_EDITAR_DIVIDIR,      VIRTKEY, NOINVERT
+    VK_DELETE,      ID_EDITAR_ELIMINAR,     VIRTKEY, NOINVERT
+    VK_DELETE,      ID_EDITAR_ELIMINAR_RIPPLE, VIRTKEY, SHIFT, NOINVERT
 END
 
 
@@ -116,6 +137,18 @@ BEGIN
     EDITTEXT        IDC_PROP_INFO,0,0,170,200,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
 END
 
+IDD_PROP_CLIP DIALOGEX 0, 0, 170, 200
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Entrada (s):",IDC_STATIC,0,2,45,8
+    EDITTEXT        IDC_CLIP_IN,48,0,60,12,ES_AUTOHSCROLL
+    LTEXT           "Salida (s):",IDC_STATIC,0,18,45,8
+    EDITTEXT        IDC_CLIP_OUT,48,16,60,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "Aplicar",IDC_CLIP_APLICAR,113,8,50,14
+    EDITTEXT        IDC_CLIP_INFO,0,34,170,166,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -134,6 +167,10 @@ BEGIN
     END
 
     IDD_PROP_MEDIO, DIALOG
+    BEGIN
+    END
+
+    IDD_PROP_CLIP, DIALOG
     BEGIN
     END
 END
@@ -164,6 +201,17 @@ END
 IDD_PROP_MEDIO AFX_DIALOG_LAYOUT
 BEGIN
     0,
+    0, 0, 100, 100
+END
+
+IDD_PROP_CLIP AFX_DIALOG_LAYOUT
+BEGIN
+    0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
     0, 0, 100, 100
 END
 

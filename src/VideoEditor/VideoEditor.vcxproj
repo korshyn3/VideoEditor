@@ -81,6 +81,7 @@
     <ClInclude Include="EditorDlg.h" />
     <ClInclude Include="EscalaTiempo.h" />
     <ClInclude Include="MensajesApp.h" />
+    <ClInclude Include="PanelClipDlg.h" />
     <ClInclude Include="PanelMedioDlg.h" />
     <ClInclude Include="PreviewWnd.h" />
     <ClInclude Include="TimelineWnd.h" />
@@ -91,6 +92,7 @@
   <ItemGroup>
     <ClCompile Include="EditorDlg.cpp" />
     <ClCompile Include="EscalaTiempo.cpp" />
+    <ClCompile Include="PanelClipDlg.cpp" />
     <ClCompile Include="PanelMedioDlg.cpp" />
     <ClCompile Include="PreviewWnd.cpp" />
     <ClCompile Include="TimelineWnd.cpp" />

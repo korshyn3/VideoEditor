@@ -60,6 +60,24 @@ public:
     // solaparía con otro clip de la pista destino.
     OpResult moveClip(Id clipId, Id destTrackId, TimeUs newStart);
 
+    // Divide el clip en el instante t del timeline: el clip original queda como la parte
+    // izquierda y se crea un clip nuevo con la derecha (mismo medio, efectos y audio
+    // vinculado). Se rechaza si t no está estrictamente dentro del clip.
+    OpResult split(Id clipId, TimeUs t, Id* clipDerecho = nullptr);
+
+    // Cambia el tramo de la fuente [newIn, newOut). Mover el punto de entrada mueve
+    // también el inicio en el timeline (el resto del clip no se desplaza). Los valores se
+    // limitan a la duración de la fuente; se rechaza si el clip dura menos de un cuadro
+    // del proyecto o si se solaparía con un vecino.
+    OpResult trimClip(Id clipId, TimeUs newIn, TimeUs newOut);
+
+    // Elimina el clip. Con ripple, los clips posteriores de la misma pista se corren a la
+    // izquierda la duración del clip eliminado; sin ripple queda un hueco.
+    OpResult removeClip(Id clipId, bool ripple);
+
+    // Duración de un cuadro del lienzo (mínimo de un clip después de un trim).
+    TimeUs frameDuration() const;
+
     // ---- Lienzo y exportación ----------------------------------------------
     OpResult setCanvas(const CanvasSettings& canvas);
     void setExportSettings(const ExportSettings& settings);
@@ -69,6 +87,8 @@ public:
 
 private:
     Track* findTrackMut(Id trackId);
+    // Clip modificable y su pista (nullptr si no existe).
+    Clip* findClipMut(Id clipId, Track** pista = nullptr);
     // Nombre siguiente para una pista nueva ("V2", "A3", ...).
     std::string nextTrackName(TrackKind kind) const;
     // true si [start, end) se solapa con algún clip de la pista (salvo ignorar).

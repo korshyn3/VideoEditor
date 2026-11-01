@@ -2,7 +2,8 @@
 // Capa: VIEW (MFC). Ventana principal del editor (diálogo IDD_EDITOR del .rc).
 //
 // Contiene la barra de botones, el preview (CPreviewWnd), el panel de propiedades (un
-// diálogo hijo) y el timeline (CTimelineWnd). El diseño se edita en el Editor de
+// diálogo hijo: CPanelClipDlg si hay un clip seleccionado, CPanelMedioDlg si no) y el
+// timeline (CTimelineWnd). El diseño se edita en el Editor de
 // recursos; el "diseño dinámico" (AFX_DIALOG_LAYOUT) reacomoda los controles al cambiar
 // el tamaño de la ventana.
 //
@@ -17,6 +18,7 @@
 
 #include "resource.h"
 #include "EditorController/EditorController.h"
+#include "PanelClipDlg.h"
 #include "PanelMedioDlg.h"
 #include "PreviewWnd.h"
 #include "TimelineWnd.h"
@@ -47,6 +49,9 @@ protected:
     afx_msg void OnAgregarPistaVideo();
     afx_msg void OnAgregarPistaAudio();
     afx_msg void OnEliminarPista();
+    afx_msg void OnDividir();
+    afx_msg void OnEliminarClip();
+    afx_msg void OnEliminarClipRipple();
     afx_msg void OnAcercaDe();
     afx_msg LRESULT OnVistaCambio(WPARAM wParam, LPARAM lParam);
     DECLARE_MESSAGE_MAP()
@@ -57,6 +62,9 @@ private:
     void ActualizarPropiedades();
     void ColocarPanelPropiedades();
     void MostrarResultado(const model::OpResult& r);
+    // Como MostrarResultado, pero un fallo solo suena (p. ej. dividir con el cursor fuera
+    // del clip: la spec dice que no se hace nada).
+    void ResultadoSilencioso(const model::OpResult& r);
     // El modelo cambió: el preview se actualiza 100 ms después del ÚLTIMO cambio
     // (SetTimer con el mismo id reinicia la cuenta), así se agrupan los cambios seguidos.
     void ProgramarSincronizacion();
@@ -71,5 +79,6 @@ private:
     CPreviewWnd m_preview;
     CTimelineWnd m_timeline;
     CPanelMedioDlg m_panelMedio;
+    CPanelClipDlg m_panelClip;
     CSize m_tamanoMinimo;
 };
