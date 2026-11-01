@@ -175,13 +175,19 @@ void CTimelineWnd::CalcularTrim(int dx) {
     const model::TimeUs cuadro = proyecto.frameDuration();
     const model::TimeUs delta = m_escala.pxADuracion(dx);
 
-    // Vecinos en la misma pista: fin del anterior e inicio del siguiente.
+    // Vecinos en la pista del clip y en la de su clip vinculado (que recibe el mismo
+    // recorte): fin del anterior e inicio del siguiente.
     model::TimeUs finAnterior = 0;
     model::TimeUs inicioSiguiente = INT64_MAX;
-    for (const model::Clip& c : pista->clips) {
-        if (c.id == clip->id) continue;
-        if (c.timelineEnd() <= clip->timelineStart) finAnterior = std::max(finAnterior, c.timelineEnd());
-        if (c.timelineStart >= clip->timelineEnd()) inicioSiguiente = std::min(inicioSiguiente, c.timelineStart);
+    const model::Track* pistaVinculado = nullptr;
+    if (clip->vinculado()) proyecto.timeline().findClip(clip->linkedClipId, &pistaVinculado);
+    for (const model::Track* t : {pista, pistaVinculado}) {
+        if (!t) continue;
+        for (const model::Clip& c : t->clips) {
+            if (c.id == clip->id || c.id == clip->linkedClipId) continue;
+            if (c.timelineEnd() <= clip->timelineStart) finAnterior = std::max(finAnterior, c.timelineEnd());
+            if (c.timelineStart >= clip->timelineEnd()) inicioSiguiente = std::min(inicioSiguiente, c.timelineStart);
+        }
     }
 
     m_trimIn = clip->sourceIn;
@@ -232,6 +238,8 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
     if (!m_ctrl) return;
 
     const controller::Seleccion& sel = m_ctrl->seleccion();
+    const model::Clip* clipSel = m_ctrl->project().timeline().findClip(sel.clipId);
+    const model::Id vinculadoSel = clipSel ? clipSel->linkedClipId : model::kSinId;
     const auto filas = PistasVisuales();
     m_escala.setOrigenX(kAnchoCabecera);
 
@@ -250,7 +258,10 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         for (const model::Clip& c : pista->clips) {
             CRect rcClip = RectClip(i, c);
             if (rcClip.right < kAnchoCabecera || rcClip.left > rc.right) continue;
-            DibujarClip(dc, rcClip, c, video, c.id == sel.clipId, pista->muted);
+            const Resaltado r = (c.id == sel.clipId) ? Resaltado::Seleccionado
+                                : (vinculadoSel != model::kSinId && c.id == vinculadoSel) ? Resaltado::Vinculado
+                                                                                          : Resaltado::Nada;
+            DibujarClip(dc, rcClip, c, video, r, pista->muted);
         }
         dc.RestoreDC(-1);
 
@@ -261,7 +272,8 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         CString nombre = CStringDesdeUtf8(pista->name);
         CRect txt = cab;
         txt.DeflateRect(8, 0);
-        dc.DrawText(nombre, txt, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        if (!video) txt.right = RectMute(i).left - 2;  // sin pisar el botón M
+        dc.DrawText(nombre, txt, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         // Botón de mute (solo pistas de audio): relleno rojo si la pista está silenciada.
         if (!video) {
@@ -287,8 +299,21 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
             fin = inicio + (m_trimOut - m_trimIn);
             pistaFantasma = pistaClip->id;
         }
+        // El clip vinculado se mueve/recorta igual: su fantasma va en la pista de audio de
+        // la pista de video destino (o, si se arrastra el audio, en la pista de su video).
+        model::Id pistaFantasmaVinculado = model::kSinId;
+        if (c->vinculado()) {
+            const model::Timeline& tl = m_ctrl->project().timeline();
+            const model::Track* pistaVinculado = nullptr;
+            tl.findClip(c->linkedClipId, &pistaVinculado);
+            if (pistaClip->kind == model::TrackKind::Video) {
+                if (const model::Track* a = tl.audioTrackOf(pistaFantasma)) pistaFantasmaVinculado = a->id;
+            } else if (pistaVinculado) {
+                pistaFantasmaVinculado = pistaVinculado->id;
+            }
+        }
         for (int i = 0; i < static_cast<int>(filas.size()); ++i) {
-            if (filas[i]->id != pistaFantasma) continue;
+            if (filas[i]->id != pistaFantasma && filas[i]->id != pistaFantasmaVinculado) continue;
             const CRect f = RectFila(i);
             CRect g(m_escala.tiempoAX(inicio), f.top + 3, m_escala.tiempoAX(fin), f.bottom - 3);
             CPen pen(PS_DOT, 1, RGB(255, 255, 255));
@@ -344,13 +369,14 @@ void CTimelineWnd::DibujarRegla(CDC& dc, const CRect& rc) {
     }
 }
 
-void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado,
-                               bool silenciado) {
+void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video,
+                               Resaltado resaltado, bool silenciado) {
+    const bool seleccionado = resaltado == Resaltado::Seleccionado;
     // Video en azul y audio en verde (gris verdoso si la pista está silenciada).
     dc.FillSolidRect(rcClip, video ? kClipVideo : (silenciado ? kClipSilenciado : kClipAudio));
 
     // Borde (amarillo y doble si está seleccionado).
-    CBrush borde(seleccionado ? kBordeSel : RGB(20, 20, 20));
+    CBrush borde(resaltado != Resaltado::Nada ? kBordeSel : RGB(20, 20, 20));
     dc.FrameRect(rcClip, &borde);
     if (seleccionado) {
         CRect interior = rcClip;
@@ -358,10 +384,10 @@ void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& 
         dc.FrameRect(interior, &borde);
     }
 
-    // Nombre del archivo fuente (+ indicador de audio vinculado).
+    // Nombre del archivo fuente, con la marca "↔" si el clip está vinculado.
     const model::MediaInfo* info = m_ctrl->project().media().find(clip.mediaId);
     CString texto = info ? NombreArchivo(info->path) : CString(L"(medio desconocido)");
-    if (video && clip.linkedAudio) texto += L"  ♪";
+    if (clip.vinculado()) texto = L"↔ " + texto;
     CRect txt = rcClip;
     txt.DeflateRect(6, 0);
     dc.SetTextColor(kTexto);
@@ -536,7 +562,10 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
     const int fila = FilaEnY(point.y);
     if (origen && fila >= 0) {
         const model::Track* bajoMouse = PistasVisuales()[fila];
-        if (bajoMouse->kind == origen->kind) m_pistaFantasma = bajoMouse->id;
+        // (Un audio vinculado no cambia de pista: la decide la pista de su video.)
+        const model::Clip* arrastrado = m_ctrl->project().timeline().findClip(m_clipArrastrado);
+        const bool audioVinculado = origen->kind == model::TrackKind::Audio && arrastrado && arrastrado->vinculado();
+        if (bajoMouse->kind == origen->kind && !audioVinculado) m_pistaFantasma = bajoMouse->id;
     }
     Invalidate(FALSE);
 }

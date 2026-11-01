@@ -48,11 +48,14 @@ Id pista(const Project& p, TrackKind kind) {
 TEST_CASE("Proyecto nuevo") {
     Project p;
     const auto& tracks = p.timeline().tracks;
-    REQUIRE(tracks.size() == 2);
+    REQUIRE(tracks.size() == 3);
     CHECK(tracks[0].kind == TrackKind::Video);
     CHECK(tracks[0].name == "V1");
-    CHECK(tracks[1].kind == TrackKind::Audio);
-    CHECK(tracks[1].name == "A1");
+    CHECK(tracks[1].esAudioDeVideo());
+    CHECK(tracks[1].name == "Audio V1");
+    CHECK(tracks[1].videoTrackId == tracks[0].id);
+    CHECK(tracks[2].esAudioGeneral());
+    CHECK(tracks[2].name == "A1");
     CHECK(p.timeline().empty());
     CHECK_FALSE(p.dirty());
 }
@@ -91,7 +94,7 @@ TEST_CASE("Eliminar la única pista de video") {
 
 TEST_CASE("Eliminar pista con sus clips") {
     Project p;
-    Id a1 = pista(p, TrackKind::Audio);
+    Id a1 = p.timeline().firstGeneralAudioTrack()->id;
     Id m = p.addMedia(audioFalso("musica.mp3", 60));
     REQUIRE(p.appendMedia(a1, m));
     REQUIRE(p.removeTrack(a1));
@@ -138,7 +141,7 @@ TEST_CASE("Importar tres videos") {
     // Cada clip abarca el archivo completo y su audio queda vinculado.
     CHECK(t->findClip(cb)->sourceIn == 0);
     CHECK(t->findClip(cb)->sourceOut == segundosATiempo(5));
-    CHECK(t->findClip(cb)->linkedAudio);
+    CHECK(t->findClip(cb)->vinculado());
     CHECK(p.timeline().duration() == segundosATiempo(23));
 }
 

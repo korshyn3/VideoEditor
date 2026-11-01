@@ -1,6 +1,7 @@
 // TestAudio.cpp
-// Escenarios de specs/audio-tracks (fase 5): separar el audio de un clip de video,
-// clips de audio independientes, importación de audio y mezcla/mute en el grafo.
+// Escenarios de specs/audio-tracks (fase 5): pistas de audio de video y generales, audio
+// vinculado a los clips de video, operaciones sobre clips vinculados, desvincular,
+// importación de audio y mezcla/mute en el grafo.
 #include <doctest/doctest.h>
 
 #include "EditorController/EditorController.h"
@@ -37,7 +38,18 @@ MediaInfo musicaFalsa(const std::string& nombre, double segundos) {
     return m;
 }
 
-Id pista(const Project& p, TrackKind kind) { return p.timeline().firstTrack(kind)->id; }
+Id v1De(const Project& p) { return p.timeline().firstTrack(TrackKind::Video)->id; }
+Id audioDe(const Project& p, Id pistaVideo) { return p.timeline().audioTrackOf(pistaVideo)->id; }
+Id a1De(const Project& p) { return p.timeline().firstGeneralAudioTrack()->id; }
+
+// Pista en la que está un clip.
+Id pistaDe(const Project& p, Id clip) {
+    const Track* t = nullptr;
+    p.timeline().findClip(clip, &t);
+    return t ? t->id : kSinId;
+}
+
+const Clip& clipDe(const Project& p, Id id) { return *p.timeline().findClip(id); }
 
 engine::GraphDescription grafo(const Project& p) {
     return FilterGraphBuilder::build({p.timeline(), p.media(), p.canvas()}, {640, 360, {25, 1}}, 0);
@@ -54,161 +66,337 @@ std::string silencio(const std::string& segundos) {
            "atrim=duration=" + segundos;
 }
 
+// Proyecto con un video con audio A (`segundos`) en V1; devuelve los ids de los clips.
+struct ConVideo {
+    Project p;
+    Id video = kSinId, audio = kSinId;
+    explicit ConVideo(double segundos = 5) {
+        p.appendMedia(v1De(p), p.addMedia(videoFalso("A.mp4", segundos)), &video);
+        audio = clipDe(p, video).linkedClipId;
+    }
+};
+
 } // namespace
 
 // ---------------------------------------------------------------------------
-// 5.1 Separar audio
+// 5.5 Tipos de pista de audio y audio vinculado
 // ---------------------------------------------------------------------------
 
-TEST_CASE("Separar audio") {
+TEST_CASE("Agregar una pista de video trae su pista de audio") {
     Project p;
-    const Id v1 = pista(p, TrackKind::Video);
-    Id clip = kSinId;
-    p.appendMedia(v1, p.addMedia(videoFalso("A.mp4", 7)), &clip);
-    REQUIRE(p.moveClip(clip, v1, s(5)));  // el clip ocupa 5–12 s
+    Id v2 = kSinId;
+    REQUIRE(p.addTrack(TrackKind::Video, &v2));
+    const Track* audioV2 = p.timeline().audioTrackOf(v2);
+    REQUIRE(audioV2 != nullptr);
+    CHECK(audioV2->name == "Audio V2");
+    CHECK(audioV2->clips.empty());
 
-    Id audio = kSinId;
-    REQUIRE(p.separateAudio(clip, &audio));
-    const Track* pistaAudio = nullptr;
-    const Clip* a = p.timeline().findClip(audio, &pistaAudio);
-    REQUIRE(a != nullptr);
-    CHECK(pistaAudio->kind == TrackKind::Audio);
-    CHECK(pistaAudio->name == "A1");
-    CHECK(a->timelineStart == s(5));
-    CHECK(a->timelineEnd() == s(12));
-    CHECK(a->sourceIn == 0);
-    CHECK(a->sourceOut == s(7));
-    CHECK(a->mediaId == p.timeline().findClip(clip)->mediaId);
-    CHECK_FALSE(p.timeline().findClip(clip)->linkedAudio);  // el video ya no aporta audio
-
-    // En el grafo, el audio sale ahora de la pista A1 y no del clip de video.
-    CHECK(entradasDeAudio(grafo(p)) == 1);
+    // Orden: V1, V2, Audio V1, Audio V2, A1 (la vista dibuja V2 arriba de V1).
+    const auto& t = p.timeline().tracks;
+    REQUIRE(t.size() == 5);
+    CHECK(t[0].name == "V1");
+    CHECK(t[1].name == "V2");
+    CHECK(t[2].name == "Audio V1");
+    CHECK(t[3].name == "Audio V2");
+    CHECK(t[4].name == "A1");
 }
 
-TEST_CASE("Separar audio sin pista de audio libre crea una nueva") {
+TEST_CASE("Agregar una pista de audio") {
     Project p;
-    Id clip = kSinId;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)), &clip);
-    p.appendMedia(pista(p, TrackKind::Audio), p.addMedia(musicaFalsa("musica.mp3", 60)));  // A1 ocupada 0–60
+    Id a2 = kSinId;
+    REQUIRE(p.addTrack(TrackKind::Audio, &a2));
+    const Track* t = p.timeline().findTrack(a2);
+    CHECK(t->esAudioGeneral());
+    CHECK(t->name == "A2");
+    CHECK(p.timeline().tracks.back().id == a2);
+}
 
-    Id audio = kSinId;
-    REQUIRE(p.separateAudio(clip, &audio));
-    const Track* pistaAudio = nullptr;
-    REQUIRE(p.timeline().findClip(audio, &pistaAudio));
-    CHECK(pistaAudio->name == "A2");
-    CHECK(p.timeline().countTracks(TrackKind::Audio) == 2);
+TEST_CASE("Eliminar una pista de audio de video") {
+    Project p;
+    const Id audioV1 = audioDe(p, v1De(p));
+    const auto rev = p.revision();
+    const OpResult r = p.removeTrack(audioV1);
+    CHECK_FALSE(r.ok);
+    CHECK(contiene(r.error, "V1"));
+    CHECK(p.revision() == rev);
+    CHECK(p.timeline().findTrack(audioV1) != nullptr);
+}
+
+TEST_CASE("Eliminar una pista de video elimina su pista de audio y desvincula") {
+    Project p;
+    Id v2 = kSinId;
+    p.addTrack(TrackKind::Video, &v2);
+    const Id audioV2 = audioDe(p, v2);
+    Id video = kSinId;
+    REQUIRE(p.appendMedia(v2, p.addMedia(videoFalso("A.mp4", 5)), &video));
+    REQUIRE(p.removeTrack(v2));
+    CHECK(p.timeline().findTrack(audioV2) == nullptr);
+    CHECK(p.timeline().empty());
+}
+
+TEST_CASE("Importar un video con audio") {
+    Project p;
+    Id video = kSinId;
+    REQUIRE(p.appendMedia(v1De(p), p.addMedia(videoFalso("A.mp4", 10)), &video));
+    const Clip& v = clipDe(p, video);
+    REQUIRE(v.vinculado());
+    const Clip& a = clipDe(p, v.linkedClipId);
+    CHECK(pistaDe(p, a.id) == audioDe(p, v1De(p)));
+    CHECK(a.linkedClipId == video);
+    CHECK(a.mediaId == v.mediaId);
+    CHECK(a.timelineStart == 0);
+    CHECK(a.timelineEnd() == s(10));
+    CHECK(a.sourceIn == v.sourceIn);
+    CHECK(a.sourceOut == v.sourceOut);
+    CHECK(p.timeline().findTrack(a1De(p))->clips.empty());  // la pista general no se toca
+}
+
+TEST_CASE("Importar un video sin audio") {
+    Project p;
+    Id video = kSinId;
+    REQUIRE(p.appendMedia(v1De(p), p.addMedia(videoFalso("mudo.mp4", 5, false)), &video));
+    CHECK_FALSE(clipDe(p, video).vinculado());
+    CHECK(p.timeline().findTrack(audioDe(p, v1De(p)))->clips.empty());
+}
+
+TEST_CASE("Desvincular audio") {
+    ConVideo c(7);
+    REQUIRE(c.p.moveClip(c.video, v1De(c.p), s(5)));  // 5–12 s
+    REQUIRE(c.p.unlinkAudio(c.video));
+    CHECK_FALSE(clipDe(c.p, c.video).vinculado());
+    CHECK_FALSE(clipDe(c.p, c.audio).vinculado());
+    // El audio sigue en 5–12 s en su pista...
+    CHECK(clipDe(c.p, c.audio).timelineStart == s(5));
+    CHECK(pistaDe(c.p, c.audio) == audioDe(c.p, v1De(c.p)));
+    // ...y ya es independiente: moverlo no mueve el video.
+    REQUIRE(c.p.moveClip(c.audio, pistaDe(c.p, c.audio), s(8)));
+    CHECK(clipDe(c.p, c.video).timelineStart == s(5));
+}
+
+TEST_CASE("Desvincular desde el clip de audio") {
+    ConVideo c;
+    REQUIRE(c.p.unlinkAudio(c.audio));
+    CHECK_FALSE(clipDe(c.p, c.video).vinculado());
 }
 
 TEST_CASE("Clip sin audio") {
     Project p;
-    Id clip = kSinId;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("mudo.mp4", 5, false)), &clip);
+    Id video = kSinId;
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("mudo.mp4", 5, false)), &video);
     const auto rev = p.revision();
-    const OpResult r = p.separateAudio(clip);
+    const OpResult r = p.unlinkAudio(video);
     CHECK_FALSE(r.ok);
     CHECK_FALSE(r.error.empty());
     CHECK(p.revision() == rev);
-    CHECK(p.timeline().findTrack(pista(p, TrackKind::Audio))->clips.empty());
+
+    ConVideo c;
+    REQUIRE(c.p.unlinkAudio(c.video));
+    CHECK_FALSE(c.p.unlinkAudio(c.video).ok);  // ya desvinculado
 }
 
-TEST_CASE("Separar dos veces o desde un clip de audio se rechaza") {
+// ---------------------------------------------------------------------------
+// 5.6 Operaciones sobre clips vinculados
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Mover el video a otra pista") {
+    ConVideo c;
+    Id v2 = kSinId;
+    c.p.addTrack(TrackKind::Video, &v2);
+    REQUIRE(c.p.moveClip(c.video, v2, s(3)));
+    CHECK(pistaDe(c.p, c.video) == v2);
+    CHECK(pistaDe(c.p, c.audio) == audioDe(c.p, v2));  // de Audio V1 a Audio V2
+    CHECK(clipDe(c.p, c.audio).timelineStart == s(3));
+    CHECK(clipDe(c.p, c.video).timelineStart == s(3));
+}
+
+TEST_CASE("Mover el audio vinculado") {
+    ConVideo c;
+    Id a2 = kSinId;
+    c.p.addTrack(TrackKind::Audio, &a2);
+    // Se pide moverlo a A2, pero un audio vinculado solo se mueve en el tiempo.
+    REQUIRE(c.p.moveClip(c.audio, a2, s(2)));
+    CHECK(clipDe(c.p, c.video).timelineStart == s(2));
+    CHECK(clipDe(c.p, c.audio).timelineStart == s(2));
+    CHECK(pistaDe(c.p, c.audio) == audioDe(c.p, v1De(c.p)));
+}
+
+TEST_CASE("Recortar un clip vinculado") {
+    ConVideo c(10);
+    REQUIRE(c.p.trimClip(c.audio, s(2), s(10)));  // 2 s menos al inicio, desde el audio
+    for (Id id : {c.video, c.audio}) {
+        CAPTURE(id);
+        CHECK(clipDe(c.p, id).sourceIn == s(2));
+        CHECK(clipDe(c.p, id).timelineStart == s(2));
+        CHECK(clipDe(c.p, id).timelineEnd() == s(10));
+    }
+}
+
+TEST_CASE("Recorte rechazado por el vecino del audio") {
+    ConVideo c(10);
+    REQUIRE(c.p.trimClip(c.video, 0, s(4)));  // A: 0–4 (video y audio)
+    // D se coloca a continuación (4–14) y se desvincula; su video pasa a V2, así que en
+    // Audio V1 queda un audio suelto en 4–14 y V1 queda libre después de A.
+    Id d = kSinId, v2 = kSinId;
+    REQUIRE(c.p.appendMedia(v1De(c.p), c.p.addMedia(videoFalso("D.mp4", 10)), &d));
+    REQUIRE(c.p.unlinkAudio(d));
+    c.p.addTrack(TrackKind::Video, &v2);
+    REQUIRE(c.p.moveClip(d, v2, s(4)));
+
+    const auto rev = c.p.revision();
+    // Extender A hasta 10 s está libre en V1, pero su audio chocaría con el de D.
+    CHECK_FALSE(c.p.trimClip(c.video, 0, s(10)).ok);
+    CHECK(c.p.revision() == rev);
+    CHECK(clipDe(c.p, c.audio).timelineEnd() == s(4));
+}
+
+TEST_CASE("Eliminar un clip vinculado") {
     Project p;
-    Id clip = kSinId;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)), &clip);
-    Id audio = kSinId;
-    REQUIRE(p.separateAudio(clip, &audio));
-    CHECK_FALSE(p.separateAudio(clip).ok);   // ya separado
-    CHECK_FALSE(p.separateAudio(audio).ok);  // es un clip de audio
+    Id a = kSinId, b = kSinId, c = kSinId;
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("A.mp4", 10)), &a);
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("B.mp4", 5)), &b);
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("C.mp4", 8)), &c);
+    const Id audioB = clipDe(p, b).linkedClipId;
+    const Id audioC = clipDe(p, c).linkedClipId;
+
+    REQUIRE(p.removeClip(b, true));
+    CHECK(p.timeline().findClip(audioB) == nullptr);
+    CHECK(clipDe(p, c).timelineStart == s(10));       // hueco cerrado en V1...
+    CHECK(clipDe(p, audioC).timelineStart == s(10));  // ...y en Audio V1
 }
 
-TEST_CASE("Controller: separar audio selecciona el clip de audio") {
+TEST_CASE("Eliminar desde el audio vinculado sin ripple") {
+    ConVideo c;
+    REQUIRE(c.p.removeClip(c.audio, false));
+    CHECK(c.p.timeline().findClip(c.video) == nullptr);
+    CHECK(c.p.timeline().empty());
+}
+
+TEST_CASE("El ripple corre también los audios vinculados de los clips siguientes") {
+    Project p;
+    Id mudo = kSinId, b = kSinId;
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("mudo.mp4", 4, false)), &mudo);  // 0–4, sin audio
+    p.appendMedia(v1De(p), p.addMedia(videoFalso("B.mp4", 5)), &b);                // 4–9 + audio
+    REQUIRE(p.removeClip(mudo, true));
+    CHECK(clipDe(p, b).timelineStart == 0);
+    CHECK(clipDe(p, clipDe(p, b).linkedClipId).timelineStart == 0);
+}
+
+TEST_CASE("Movimiento rechazado por el audio") {
+    ConVideo c;  // A: 0–5 con audio en Audio V1
+    REQUIRE(c.p.unlinkAudio(c.video));
+    REQUIRE(c.p.moveClip(c.audio, audioDe(c.p, v1De(c.p)), s(10)));  // audio suelto en 10–15
+
+    Id b = kSinId;
+    REQUIRE(c.p.appendMedia(v1De(c.p), c.p.addMedia(videoFalso("B.mp4", 5)), &b));  // 15–20
+    const auto rev = c.p.revision();
+    // En V1 el hueco 6–11 está libre, pero en Audio V1 está el audio suelto (10–15).
+    CHECK_FALSE(c.p.moveClip(b, v1De(c.p), s(6)).ok);
+    CHECK(c.p.revision() == rev);
+    CHECK(clipDe(c.p, b).timelineStart == s(15));
+    CHECK(clipDe(c.p, clipDe(c.p, b).linkedClipId).timelineStart == s(15));
+}
+
+TEST_CASE("Mover un video desvinculado") {
+    ConVideo c;
+    Id v2 = kSinId;
+    c.p.addTrack(TrackKind::Video, &v2);
+    REQUIRE(c.p.unlinkAudio(c.video));
+    REQUIRE(c.p.moveClip(c.video, v2, s(1)));
+    CHECK(pistaDe(c.p, c.audio) == audioDe(c.p, v1De(c.p)));
+    CHECK(clipDe(c.p, c.audio).timelineStart == 0);
+}
+
+TEST_CASE("Llevar el audio a una pista general") {
+    ConVideo c;
+    REQUIRE(c.p.unlinkAudio(c.video));
+    REQUIRE(c.p.moveClip(c.audio, a1De(c.p), s(3)));
+    CHECK(pistaDe(c.p, c.audio) == a1De(c.p));
+    CHECK(clipDe(c.p, c.audio).timelineStart == s(3));
+}
+
+TEST_CASE("Controller: desvincular el clip seleccionado") {
     controller::EditorController ctrl;
     const auto r = ctrl.importFiles({medioPrueba("video_audio.mp4")});
     REQUIRE(r.errores.empty());
+    CHECK_FALSE(ctrl.unlinkAudio().ok);  // nada seleccionado
     ctrl.seleccionarClip(r.clips.at(0));
-    REQUIRE(ctrl.separateAudio());
-    const Track* pistaSel = ctrl.project().timeline().findTrack(ctrl.seleccion().trackId);
-    REQUIRE(pistaSel != nullptr);
-    CHECK(pistaSel->kind == TrackKind::Audio);
-    CHECK(ctrl.seleccion().clipId != r.clips.at(0));
+    REQUIRE(ctrl.unlinkAudio());
+    CHECK_FALSE(ctrl.project().timeline().findClip(r.clips.at(0))->vinculado());
+    CHECK(ctrl.seleccion().clipId == r.clips.at(0));
 }
 
 // ---------------------------------------------------------------------------
-// 5.2 Clips de audio independientes y mezcla
+// 5.2 Mezcla en el grafo
 // ---------------------------------------------------------------------------
 
-TEST_CASE("Mover el audio separado") {
-    Project p;
-    Id clip = kSinId, audio = kSinId;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)), &clip);  // 0–5 s
-    REQUIRE(p.separateAudio(clip, &audio));
-    REQUIRE(p.moveClip(audio, pista(p, TrackKind::Audio), s(2)));  // audio 2–7 s
+TEST_CASE("El audio sale de la pista de audio, no del clip de video") {
+    ConVideo c;
+    auto d = grafo(c.p);
+    CHECK(entradasDeAudio(d) == 1);
+    // Silenciar Audio V1 silencia el audio del video.
+    REQUIRE(c.p.setTrackMuted(audioDe(c.p, v1De(c.p)), true));
+    d = grafo(c.p);
+    CHECK(entradasDeAudio(d) == 0);
+}
+
+TEST_CASE("Mover el audio desvinculado") {
+    ConVideo c;  // 0–5 s
+    REQUIRE(c.p.unlinkAudio(c.video));
+    REQUIRE(c.p.moveClip(c.audio, pistaDe(c.p, c.audio), s(2)));  // audio 2–7 s
 
     // La imagen no cambia de lugar.
-    CHECK(p.timeline().findClip(clip)->timelineStart == 0);
-    const auto d = grafo(p);
+    CHECK(clipDe(c.p, c.video).timelineStart == 0);
+    const auto d = grafo(c.p);
     CHECK(d.fin == s(7));
-    // El audio suena 2 s después: la pista A1 empieza con 2 s de silencio.
+    // El audio suena 2 s después: su pista empieza con 2 s de silencio.
     CHECK(contiene(d.filtros, silencio("2.000000")));
     CHECK(entradasDeAudio(d) == 1);
 }
 
-TEST_CASE("Borrar el audio separado") {
-    Project p;
-    Id clip = kSinId, audio = kSinId;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)), &clip);
-    REQUIRE(p.separateAudio(clip, &audio));
-    REQUIRE(p.removeClip(audio, false));
+TEST_CASE("Borrar el audio desvinculado") {
+    ConVideo c;
+    REQUIRE(c.p.unlinkAudio(c.video));
+    REQUIRE(c.p.removeClip(c.audio, false));
+    CHECK(c.p.timeline().findClip(c.video) != nullptr);
 
     // Ese tramo del video queda en silencio: no hay entradas de audio, solo anullsrc.
-    const auto d = grafo(p);
+    const auto d = grafo(c.p);
     CHECK(entradasDeAudio(d) == 0);
     CHECK(contiene(d.filtros, silencio("5.000000")));
     CHECK_FALSE(contiene(d.filtros, "amix"));
 }
 
 TEST_CASE("Música sobre video con audio") {
-    Project p;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)));
-    p.appendMedia(pista(p, TrackKind::Audio), p.addMedia(musicaFalsa("musica.mp3", 5)));
+    ConVideo c;
+    c.p.appendMedia(a1De(c.p), c.p.addMedia(musicaFalsa("musica.mp3", 5)));
 
-    const auto d = grafo(p);
-    CHECK(entradasDeAudio(d) == 2);  // audio vinculado + música
+    const auto d = grafo(c.p);
+    CHECK(entradasDeAudio(d) == 2);  // audio del video + música
     CHECK(contiene(d.filtros, "amix=inputs=2:duration=longest:normalize=0"));
 }
 
 TEST_CASE("Pista silenciada") {
-    Project p;
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5)));
+    ConVideo c;
     Id a2 = kSinId;
-    p.addTrack(TrackKind::Audio, &a2);
-    p.appendMedia(a2, p.addMedia(musicaFalsa("musica.mp3", 5)));
+    c.p.addTrack(TrackKind::Audio, &a2);
+    c.p.appendMedia(a2, c.p.addMedia(musicaFalsa("musica.mp3", 5)));
 
-    REQUIRE(p.setTrackMuted(a2, true));
-    CHECK(p.timeline().findTrack(a2)->muted);
-    auto d = grafo(p);
-    CHECK(entradasDeAudio(d) == 1);  // solo el audio vinculado del video
+    REQUIRE(c.p.setTrackMuted(a2, true));
+    CHECK(c.p.timeline().findTrack(a2)->muted);
+    auto d = grafo(c.p);
+    CHECK(entradasDeAudio(d) == 1);  // solo el audio del video
     CHECK_FALSE(contiene(d.filtros, "amix"));
     for (const auto& in : d.inputs) CHECK(in.mediaPath != "musica.mp3");
 
-    REQUIRE(p.setTrackMuted(a2, false));
-    CHECK(entradasDeAudio(grafo(p)) == 2);
+    REQUIRE(c.p.setTrackMuted(a2, false));
+    CHECK(entradasDeAudio(grafo(c.p)) == 2);
 
     // Las pistas de video no se silencian.
-    CHECK_FALSE(p.setTrackMuted(pista(p, TrackKind::Video), true).ok);
-}
-
-TEST_CASE("Se mezcla el audio de un clip en una pista de video superior") {
-    Project p;
-    Id v2 = kSinId;
-    p.addTrack(TrackKind::Video, &v2);
-    p.appendMedia(v2, p.addMedia(videoFalso("pip.mp4", 3)));
-    p.appendMedia(pista(p, TrackKind::Video), p.addMedia(videoFalso("A.mp4", 5, false)));
-    CHECK(entradasDeAudio(grafo(p)) == 1);
+    CHECK_FALSE(c.p.setTrackMuted(v1De(c.p), true).ok);
 }
 
 // ---------------------------------------------------------------------------
-// 5.3 Importación de audio
+// 5.7 Importación en el controller
 // ---------------------------------------------------------------------------
 
 TEST_CASE("Importar música") {
@@ -223,20 +411,38 @@ TEST_CASE("Importar música") {
     CHECK(t->clips[0].duration() == ctrl.project().media().find(t->clips[0].mediaId)->duration);
     CHECK(t->clips[1].timelineStart == t->clips[0].timelineEnd());  // en orden, sin hueco
     CHECK(t->clips[2].timelineStart == t->clips[1].timelineEnd());
-    CHECK(ctrl.project().timeline().firstTrack(TrackKind::Audio)->clips.empty());  // A1 no se tocó
+    CHECK(ctrl.project().timeline().firstGeneralAudioTrack()->clips.empty());  // A1 no se tocó
+}
+
+TEST_CASE("La música nunca va a una pista de audio de video") {
+    controller::EditorController ctrl;
+    const model::Timeline& tl = ctrl.project().timeline();
+    ctrl.seleccionarPista(tl.audioTrackOf(tl.firstTrack(TrackKind::Video)->id)->id);
+    const auto r = ctrl.importFiles({medioPrueba("tono.mp3")});
+    REQUIRE(r.errores.empty());
+    CHECK(pistaDe(ctrl.project(), r.clips.at(0)) == tl.firstGeneralAudioTrack()->id);
+}
+
+TEST_CASE("Con Audio V2 seleccionada, un video va a V2") {
+    controller::EditorController ctrl;
+    REQUIRE(ctrl.addTrack(TrackKind::Video));
+    const Id v2 = ctrl.seleccion().trackId;
+    ctrl.seleccionarPista(ctrl.project().timeline().audioTrackOf(v2)->id);
+    const auto r = ctrl.importFiles({medioPrueba("video_audio.mp4")});
+    REQUIRE(r.errores.empty());
+    CHECK(pistaDe(ctrl.project(), r.clips.at(0)) == v2);
 }
 
 TEST_CASE("Importar video en pista de audio") {
     controller::EditorController ctrl;
-    const Id a1 = ctrl.project().timeline().firstTrack(TrackKind::Audio)->id;
+    const Id a1 = ctrl.project().timeline().firstGeneralAudioTrack()->id;
     ctrl.seleccionarPista(a1);
 
-    // Un video con audio: se coloca solo su audio en A1.
+    // Un video con audio: se coloca solo su audio en A1, sin vínculo.
     auto r = ctrl.importFiles({medioPrueba("video_audio.mp4")});
     REQUIRE(r.errores.empty());
-    const Track* pistaClip = nullptr;
-    REQUIRE(ctrl.project().timeline().findClip(r.clips.at(0), &pistaClip));
-    CHECK(pistaClip->id == a1);
+    CHECK(pistaDe(ctrl.project(), r.clips.at(0)) == a1);
+    CHECK_FALSE(ctrl.project().timeline().findClip(r.clips.at(0))->vinculado());
     CHECK(ctrl.project().timeline().firstTrack(TrackKind::Video)->clips.empty());
 
     // Un video sin audio: se rechaza con un mensaje.

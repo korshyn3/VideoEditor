@@ -8,7 +8,7 @@
 // Ver design.md, D6. Resumen:
 //   - cada pista es un `concat` de segmentos (clips y huecos) desde T0 hasta el final;
 //   - los segmentos de video se cuantizan a la rejilla de cuadros del proyecto;
-//   - el audio (vinculado de V1 + pistas de audio) se mezcla con `amix`;
+//   - el audio (todas las pistas de audio no silenciadas) se mezcla con `amix`;
 //   - las salidas se llaman [vout] (video) y [aout] (audio, 48 kHz estéreo float).
 // Cada clip aporta una ENTRADA ([in0], [in1], ...) que el GraphRunner alimenta con los
 // cuadros de un MediaDecoder.

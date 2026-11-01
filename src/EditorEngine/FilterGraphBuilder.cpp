@@ -164,7 +164,7 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     // Cada pista es un concat de tramos (audio de un clip o silencio) desde T0 hasta el
     // final. Las pistas que en ese rango solo tendrían silencio no se agregan.
     std::vector<std::string> pistasAudio;
-    auto pistaDeAudio = [&](const model::Track& pista, bool soloVinculado) {
+    auto pistaDeAudio = [&](const model::Track& pista) {
         const auto segs = segmentar(pista, d.t0, d.fin, fps);
         const std::string prefijo = "a" + std::to_string(pistasAudio.size()) + "s";
         std::string cadena, concatA;
@@ -176,7 +176,7 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
             if (dur <= 0) continue;
             const std::string etiqueta = prefijo + std::to_string(i);
             const model::MediaInfo* info = s.clip ? snap.media.find(s.clip->mediaId) : nullptr;
-            if (s.clip && (!soloVinculado || s.clip->linkedAudio) && info && info->hasAudio) {
+            if (s.clip && info && info->hasAudio) {
                 const GraphInput in = nuevaEntrada(*s.clip, false, s.ini, s.fin);
                 cadena += "[" + in.label + "]atrim=start=" + seg(in.sourceIn) + ":end=" + seg(in.sourceIn + dur) +
                           ",asetpts=PTS-STARTPTS,aresample=48000," + kFormatoAudio + ",apad=whole_dur=" + seg(dur) +
@@ -199,12 +199,10 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         }
     };
 
-    // Audio vinculado de los clips de video (de todas las pistas de video) y pistas de
-    // audio que no están silenciadas.
+    // Todo el sonido sale de las pistas de audio (de video y generales) que no están
+    // silenciadas; los clips de video no aportan audio (su audio es un clip vinculado).
     for (const model::Track& t : snap.timeline.tracks)
-        if (t.kind == model::TrackKind::Video) pistaDeAudio(t, true);
-    for (const model::Track& t : snap.timeline.tracks)
-        if (t.kind == model::TrackKind::Audio && !t.muted) pistaDeAudio(t, false);
+        if (t.kind == model::TrackKind::Audio && !t.muted) pistaDeAudio(t);
 
     // ---- Mezcla final de audio ----
     std::string mezcla;

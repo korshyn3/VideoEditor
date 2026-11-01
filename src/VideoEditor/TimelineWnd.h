@@ -11,7 +11,10 @@
 //   | A1       |   [clip de audio]                        |   <- pistas de audio
 //   +----------+------------------------------------------+
 //
-// Las pistas de audio tienen en su cabecera un botón "M" para silenciarlas (mute).
+// Debajo de las pistas de video están sus pistas de audio ("Audio V1"...) y al final las
+// pistas de audio generales (A1...). Las pistas de audio tienen en su cabecera un botón
+// "M" para silenciarlas (mute). Los clips vinculados (video <-> su audio) llevan la marca
+// "↔" y se mueven y recortan juntos: el arrastre muestra el fantasma de los dos.
 //
 // Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
 // arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
@@ -60,7 +63,7 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
-    static constexpr int kAnchoCabecera = 80;  // columna con los nombres de pista
+    static constexpr int kAnchoCabecera = 90;  // columna con los nombres de pista
     static constexpr int kAltoRegla = 24;
     static constexpr int kAltoPista = 48;
     static constexpr int kUmbralArrastre = 4;  // px antes de considerar que es un arrastre
@@ -88,7 +91,10 @@ private:
 
     void Dibujar(CDC& dc, const CRect& rc);
     void DibujarRegla(CDC& dc, const CRect& rc);
-    void DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado,
+    // Resaltado de un clip: el seleccionado lleva borde doble amarillo y su clip vinculado,
+    // borde simple.
+    enum class Resaltado { Nada, Vinculado, Seleccionado };
+    void DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, Resaltado resaltado,
                      bool silenciado);
 
     void MoverCursorA(int x);

@@ -47,10 +47,12 @@ public:
 
     // ---- Acciones del usuario -----------------------------------------------
     // Importa archivos en el orden dado, a continuación del último clip de la pista.
-    //   - Si la pista seleccionada es de audio, todos van a ella; de los videos se coloca
-    //     solo su audio (y se rechazan los que no tienen audio).
-    //   - Si no, los que tienen video van a la pista de video seleccionada (o a V1) y los
-    //     de solo audio a la primera pista de audio (que se crea si no existe).
+    //   - Videos: a la pista de video seleccionada (o la dueña de la pista de audio de
+    //     video seleccionada, o V1), con su audio vinculado. Si la pista seleccionada es
+    //     una pista de audio general, se coloca allí solo su audio, sin vínculo (y se
+    //     rechazan los que no tienen audio).
+    //   - Archivos de audio: a la pista general seleccionada o a la primera general
+    //     (que se crea si no existe).
     ImportResult importFiles(const std::vector<std::string>& rutasUtf8);
 
     model::OpResult addTrack(model::TrackKind kind);
@@ -64,8 +66,8 @@ public:
     model::OpResult trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut);
     // Elimina el clip seleccionado, dejando un hueco o cerrándolo (ripple).
     model::OpResult deleteSelectedClip(bool ripple);
-    // Separa el audio del clip de video seleccionado; la selección pasa al clip de audio.
-    model::OpResult separateAudio();
+    // Desvincula el clip seleccionado de su clip vinculado (video <-> audio).
+    model::OpResult unlinkAudio();
     model::OpResult setTrackMuted(model::Id trackId, bool muted);
 
     // ---- Selección y cursor -------------------------------------------------
@@ -94,7 +96,8 @@ public:
 private:
     // Corrige la selección si la pista o el clip seleccionados ya no existen.
     void validarSeleccion();
-    model::Id pistaDestino(model::TrackKind kind);
+    // Pista donde se coloca un archivo importado (ver importFiles).
+    model::Id pistaDestino(bool tieneVideo);
 
     model::Project project_;
     Seleccion seleccion_;

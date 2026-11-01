@@ -1,8 +1,9 @@
 // Timeline.h
 // Capa: MODEL.
 //
-// El timeline es la lista de pistas. El orden del vector importa para las pistas de
-// video: la primera pista de video (V1) es el fondo y las siguientes se dibujan encima.
+// El timeline es la lista de pistas, en este orden: pistas de video (V1 es el fondo y las
+// siguientes se dibujan encima), pistas de audio de video (Audio V1, Audio V2...) y
+// pistas de audio generales (A1, A2...).
 // Es un tipo valor (copiable): el preview recibe una COPIA ("snapshot") para trabajar en
 // otro hilo sin bloquear el modelo (design.md, D8).
 #pragma once
@@ -52,6 +53,20 @@ struct Timeline {
     const Track* firstTrack(TrackKind kind) const {
         for (const Track& t : tracks)
             if (t.kind == kind) return &t;
+        return nullptr;
+    }
+
+    // Pista de audio que pertenece a la pista de video dada (o nullptr).
+    const Track* audioTrackOf(Id videoTrackId) const {
+        if (videoTrackId == kSinId) return nullptr;
+        for (const Track& t : tracks)
+            if (t.kind == TrackKind::Audio && t.videoTrackId == videoTrackId) return &t;
+        return nullptr;
+    }
+
+    const Track* firstGeneralAudioTrack() const {
+        for (const Track& t : tracks)
+            if (t.esAudioGeneral()) return &t;
         return nullptr;
     }
 

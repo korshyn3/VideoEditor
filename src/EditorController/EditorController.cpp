@@ -16,15 +16,25 @@ engine::ProbeResult EditorController::analizarArchivo(const std::string& rutaUtf
     return engine::MediaProbe::probe(rutaUtf8);
 }
 
-model::Id EditorController::pistaDestino(model::TrackKind kind) {
-    // 1) la pista seleccionada, si es del tipo correcto;
-    const model::Track* sel = project_.timeline().findTrack(seleccion_.trackId);
-    if (sel && sel->kind == kind) return sel->id;
-    // 2) la primera pista de ese tipo;
-    if (const model::Track* primera = project_.timeline().firstTrack(kind)) return primera->id;
-    // 3) si no hay ninguna (solo puede pasar con audio), se crea.
+model::Id EditorController::pistaDestino(bool tieneVideo) {
+    const model::Timeline& tl = project_.timeline();
+    const model::Track* sel = tl.findTrack(seleccion_.trackId);
+
+    // Un video va a una pista general seleccionada (solo su audio) o a una de video: la
+    // seleccionada, la dueña de la pista de audio de video seleccionada, o V1.
+    if (tieneVideo) {
+        if (sel && sel->esAudioGeneral()) return sel->id;
+        if (sel && sel->kind == model::TrackKind::Video) return sel->id;
+        if (sel && sel->esAudioDeVideo() && tl.findTrack(sel->videoTrackId)) return sel->videoTrackId;
+        return tl.firstTrack(model::TrackKind::Video)->id;
+    }
+
+    // Un archivo de audio va a la pista general seleccionada, o a la primera general (que
+    // se crea si no existe). Nunca a una pista de audio de video.
+    if (sel && sel->esAudioGeneral()) return sel->id;
+    if (const model::Track* general = tl.firstGeneralAudioTrack()) return general->id;
     model::Id nueva = model::kSinId;
-    project_.addTrack(kind, &nueva);
+    project_.addTrack(model::TrackKind::Audio, &nueva);
     return nueva;
 }
 
@@ -36,12 +46,10 @@ ImportResult EditorController::importFiles(const std::vector<std::string>& rutas
             resultado.errores.push_back(probe.error);
             continue;
         }
-        const model::Track* sel = project_.timeline().findTrack(seleccion_.trackId);
-        const bool aPistaDeAudio = (sel && sel->kind == model::TrackKind::Audio) || !probe.info.hasVideo;
-        const model::TrackKind kind = aPistaDeAudio ? model::TrackKind::Audio : model::TrackKind::Video;
+        const bool tieneVideo = probe.info.hasVideo;
         const model::Id mediaId = project_.addMedia(std::move(probe.info));
         model::Id clipId = model::kSinId;
-        const model::OpResult r = project_.appendMedia(pistaDestino(kind), mediaId, &clipId);
+        const model::OpResult r = project_.appendMedia(pistaDestino(tieneVideo), mediaId, &clipId);
         if (r.ok)
             resultado.clips.push_back(clipId);
         else
@@ -87,12 +95,9 @@ model::OpResult EditorController::deleteSelectedClip(bool ripple) {
     return r;
 }
 
-model::OpResult EditorController::separateAudio() {
+model::OpResult EditorController::unlinkAudio() {
     if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
-    model::Id audio = model::kSinId;
-    model::OpResult r = project_.separateAudio(seleccion_.clipId, &audio);
-    if (r.ok) seleccionarClip(audio);
-    return r;
+    return project_.unlinkAudio(seleccion_.clipId);
 }
 
 model::OpResult EditorController::setTrackMuted(model::Id trackId, bool muted) {

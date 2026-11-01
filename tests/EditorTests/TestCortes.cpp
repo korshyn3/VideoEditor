@@ -105,10 +105,20 @@ TEST_CASE("Cursor fuera del clip") {
 TEST_CASE("Split conserva el audio vinculado") {
     TresClips t;
     Id derecho = kSinId;
-    REQUIRE(t.clip(t.b).linkedAudio);
+    const Id audioB = t.clip(t.b).linkedClipId;
+    REQUIRE(audioB != kSinId);
     REQUIRE(t.p.split(t.b, s(12), &derecho));
-    CHECK(t.clip(t.b).linkedAudio);
-    CHECK(t.clip(derecho).linkedAudio);
+
+    // El audio también se dividió en 12 s y cada mitad sigue vinculada a la suya.
+    const Clip& audioIzq = t.clip(audioB);
+    const Clip& audioDer = t.clip(t.clip(derecho).linkedClipId);
+    CHECK(t.clip(t.b).linkedClipId == audioB);
+    CHECK(audioIzq.linkedClipId == t.b);
+    CHECK(audioDer.linkedClipId == derecho);
+    CHECK(audioIzq.timelineEnd() == s(12));
+    CHECK(audioDer.timelineStart == s(12));
+    CHECK(audioDer.sourceIn == s(2));
+    CHECK(audioDer.sourceOut == s(5));
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +313,7 @@ TEST_CASE("Edición no destructiva") {
         REQUIRE(ctrl.trimClip(r.clips[0], s(0.5), s(2.5)));
         ctrl.seleccionarClip(r.clips[1]);
         REQUIRE(ctrl.deleteSelectedClip(true));
-        REQUIRE(ctrl.removeTrack(ctrl.project().timeline().firstTrack(TrackKind::Audio)->id));
+        REQUIRE(ctrl.removeTrack(ctrl.project().timeline().firstGeneralAudioTrack()->id));
     }
 
     for (size_t i = 0; i < medios.size(); ++i) {

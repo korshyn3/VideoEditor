@@ -59,8 +59,8 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_COMMAND(ID_EDITAR_DIVIDIR, &CEditorDlg::OnDividir)
     ON_COMMAND(ID_EDITAR_ELIMINAR, &CEditorDlg::OnEliminarClip)
     ON_COMMAND(ID_EDITAR_ELIMINAR_RIPPLE, &CEditorDlg::OnEliminarClipRipple)
-    ON_BN_CLICKED(IDC_BTN_SEPARAR_AUDIO, &CEditorDlg::OnSepararAudio)
-    ON_COMMAND(ID_EDITAR_SEPARAR_AUDIO, &CEditorDlg::OnSepararAudio)
+    ON_BN_CLICKED(IDC_BTN_DESVINCULAR_AUDIO, &CEditorDlg::OnDesvincularAudio)
+    ON_COMMAND(ID_EDITAR_DESVINCULAR_AUDIO, &CEditorDlg::OnDesvincularAudio)
     ON_COMMAND(ID_AYUDA_ACERCA, &CEditorDlg::OnAcercaDe)
     ON_MESSAGE(WM_APP_VISTA_CAMBIO, &CEditorDlg::OnVistaCambio)
 END_MESSAGE_MAP()
@@ -228,10 +228,10 @@ void CEditorDlg::OnEliminarClipRipple() {
     ResultadoSilencioso(m_controller.deleteSelectedClip(true));
 }
 
-void CEditorDlg::OnSepararAudio() {
-    // A diferencia de dividir, aquí el motivo del rechazo (clip sin audio, audio ya
-    // separado) sí se explica con un mensaje.
-    MostrarResultado(m_controller.separateAudio());
+void CEditorDlg::OnDesvincularAudio() {
+    // A diferencia de dividir, aquí el motivo del rechazo (clip sin audio vinculado) sí
+    // se explica con un mensaje.
+    MostrarResultado(m_controller.unlinkAudio());
 }
 
 void CEditorDlg::OnAcercaDe() {
@@ -334,16 +334,21 @@ void CEditorDlg::ActualizarPropiedades() {
     const model::Track* pista = nullptr;
     const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista);
     GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(clip != nullptr);
-    // "Separar audio" solo tiene sentido en un clip de video que aún reproduce su audio.
-    GetDlgItem(IDC_BTN_SEPARAR_AUDIO)
-        ->EnableWindow(clip != nullptr && pista->kind == model::TrackKind::Video && clip->linkedAudio);
+    // "Desvincular audio" solo tiene sentido en un clip (de video o de audio) vinculado.
+    GetDlgItem(IDC_BTN_DESVINCULAR_AUDIO)->EnableWindow(clip != nullptr && clip->vinculado());
     if (clip) {
         t += L"CLIP (pista " + CStringDesdeUtf8(pista->name) + L")\r\n";
         t += L"Posición: " + TextoTiempo(clip->timelineStart) + L" → " + TextoTiempo(clip->timelineEnd()) + L"\r\n";
         t += L"Tramo de la fuente: " + TextoTiempo(clip->sourceIn) + L" → " + TextoTiempo(clip->sourceOut) + L"\r\n";
         t += L"Duración: " + TextoTiempo(clip->duration()) + L"\r\n";
-        if (pista->kind == model::TrackKind::Video)
-            t += clip->linkedAudio ? L"Audio vinculado: sí\r\n" : L"Audio vinculado: no\r\n";
+        if (clip->vinculado()) {
+            const model::Track* pistaVinculado = nullptr;
+            p.timeline().findClip(clip->linkedClipId, &pistaVinculado);
+            t += (pista->kind == model::TrackKind::Video ? L"Audio vinculado en: " : L"Vinculado al video de: ") +
+                 (pistaVinculado ? CStringDesdeUtf8(pistaVinculado->name) : CString(L"?")) + L"\r\n";
+        } else {
+            t += L"Sin vínculo\r\n";
+        }
         t += L"\r\nMEDIO FUENTE\r\n";
         if (const model::MediaInfo* info = p.media().find(clip->mediaId)) t += TextoInfoMedio(*info);
     } else if ((pista = p.timeline().findTrack(sel.trackId)) != nullptr) {

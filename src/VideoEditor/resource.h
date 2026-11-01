@@ -11,7 +11,7 @@
 #define IDC_BTN_IMPORTAR                1000
 #define IDC_BTN_PLAY                    1001
 #define IDC_BTN_SPLIT                   1002
-#define IDC_BTN_SEPARAR_AUDIO           1003
+#define IDC_BTN_DESVINCULAR_AUDIO       1003
 #define IDC_STATIC_TIEMPO               1004
 #define IDC_BTN_EXPORTAR                1005
 #define IDC_PREVIEW                     1006
@@ -32,7 +32,7 @@
 #define ID_EDITAR_DIVIDIR               32778
 #define ID_EDITAR_ELIMINAR              32779
 #define ID_EDITAR_ELIMINAR_RIPPLE       32780
-#define ID_EDITAR_SEPARAR_AUDIO         32781
+#define ID_EDITAR_DESVINCULAR_AUDIO     32781
 
 // Next default values for new objects
 //

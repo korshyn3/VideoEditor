@@ -4,6 +4,10 @@
 // Un clip es una REFERENCIA a un tramo de un archivo fuente colocado en el timeline.
 // Nunca contiene ni modifica los datos del archivo (edición no destructiva).
 //
+// Un clip de video con audio tiene un clip de audio VINCULADO (linkedClipId, en los dos
+// sentidos) en la pista de audio de su pista de video. Mientras están vinculados tienen
+// el mismo medio, tramo y posición, y las operaciones de edición se aplican a los dos.
+//
 //   archivo fuente:  |----[sourceIn ======= sourceOut]------|
 //   timeline:              [timelineStart ===== timelineEnd()]
 #pragma once
@@ -32,7 +36,7 @@ struct Clip {
     TimeUs sourceIn = 0;         // punto de entrada dentro del archivo fuente
     TimeUs sourceOut = 0;        // punto de salida (exclusivo)
     TimeUs timelineStart = 0;    // dónde empieza en el timeline
-    bool linkedAudio = false;    // clip de video que además reproduce el audio de su fuente
+    Id linkedClipId = kSinId;    // clip vinculado (video <-> su audio), o ninguno
     std::vector<Effect> effects; // se aplican en este orden
     PipTransform transform;
 
@@ -40,6 +44,7 @@ struct Clip {
     TimeUs timelineEnd() const { return timelineStart + duration(); }
     // true si el instante t del timeline cae dentro del clip.
     bool contiene(TimeUs t) const { return t >= timelineStart && t < timelineEnd(); }
+    bool vinculado() const { return linkedClipId != kSinId; }
 };
 
 } // namespace model

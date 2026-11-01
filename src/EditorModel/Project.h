@@ -30,7 +30,8 @@ struct CanvasSettings {
 
 class Project {
 public:
-    // Proyecto nuevo: una pista de video (V1), una de audio (A1) y ningún clip.
+    // Proyecto nuevo: una pista de video (V1), su pista de audio (Audio V1), una pista de
+    // audio general (A1) y ningún clip.
     Project();
 
     // ---- Lectura -----------------------------------------------------------
@@ -46,42 +47,50 @@ public:
     Id addMedia(MediaInfo info);
 
     // ---- Pistas ------------------------------------------------------------
+    // Una pista de video nueva va encima de las demás y trae su pista de audio de video;
+    // una pista de audio nueva es siempre general.
     OpResult addTrack(TrackKind kind, Id* nuevaPista = nullptr);
-    // Elimina la pista y sus clips. Siempre debe quedar al menos una pista de video.
+    // Elimina la pista y sus clips (una pista de video, también su pista de audio).
+    // Siempre debe quedar al menos una pista de video, y una pista de audio de video no
+    // se puede eliminar sola. Los clips de otras pistas vinculados con los eliminados
+    // quedan desvinculados.
     OpResult removeTrack(Id trackId);
     // Silencia (o vuelve a activar) una pista de audio.
     OpResult setTrackMuted(Id trackId, bool muted);
 
     // ---- Clips -------------------------------------------------------------
-    // Coloca el medio completo al final de la pista. En una pista de video el medio
-    // debe tener video (su audio queda vinculado); en una de audio debe tener audio.
+    // Coloca el medio completo al final de la pista.
+    //   - Pista de video: el medio debe tener video. Si tiene audio, se crea además el
+    //     clip de audio vinculado en la pista de audio de esa pista de video.
+    //   - Pista de audio: el medio debe tener audio; se coloca solo el audio, sin vínculo.
     // Si es el primer clip del proyecto y tiene video, define el lienzo.
     OpResult appendMedia(Id trackId, Id mediaId, Id* nuevoClip = nullptr);
 
-    // Mueve un clip a otra posición y/o a otra pista del mismo tipo. Se rechaza si se
-    // solaparía con otro clip de la pista destino.
+    // Mueve un clip a otra posición y/o a otra pista del mismo tipo. Si está vinculado,
+    // su clip vinculado se mueve igual: el audio va a la pista de audio de la pista de
+    // video destino (y un audio vinculado solo se mueve en el tiempo: su pista la decide
+    // su video). Se rechaza entero si algún clip se solaparía con otro.
     OpResult moveClip(Id clipId, Id destTrackId, TimeUs newStart);
 
-    // Divide el clip en el instante t del timeline: el clip original queda como la parte
-    // izquierda y se crea un clip nuevo con la derecha (mismo medio, efectos y audio
-    // vinculado). Se rechaza si t no está estrictamente dentro del clip.
+    // Divide el clip (y su vinculado) en el instante t del timeline: el original queda
+    // como la parte izquierda y se crea un clip nuevo con la derecha (mismo medio,
+    // efectos y transformación); las mitades derechas quedan vinculadas entre sí. Se
+    // rechaza si t no está estrictamente dentro del clip.
     OpResult split(Id clipId, TimeUs t, Id* clipDerecho = nullptr);
 
-    // Cambia el tramo de la fuente [newIn, newOut). Mover el punto de entrada mueve
-    // también el inicio en el timeline (el resto del clip no se desplaza). Los valores se
-    // limitan a la duración de la fuente; se rechaza si el clip dura menos de un cuadro
-    // del proyecto o si se solaparía con un vecino.
+    // Cambia el tramo de la fuente [newIn, newOut) del clip y de su vinculado. Mover el
+    // punto de entrada mueve también el inicio en el timeline. Los valores se limitan a
+    // la duración de la fuente; se rechaza si el clip dura menos de un cuadro del
+    // proyecto o si alguno de los dos se solaparía con un vecino.
     OpResult trimClip(Id clipId, TimeUs newIn, TimeUs newOut);
 
-    // Elimina el clip. Con ripple, los clips posteriores de la misma pista se corren a la
-    // izquierda la duración del clip eliminado; sin ripple queda un hueco.
+    // Elimina el clip y su vinculado. Con ripple, en cada pista afectada los clips
+    // posteriores se corren a la izquierda la duración del clip; sin ripple queda un hueco.
     OpResult removeClip(Id clipId, bool ripple);
 
-    // Separa el audio de un clip de video: crea un clip de audio con el mismo medio, tramo
-    // y posición en la primera pista de audio libre en ese rango (o en una pista nueva) y
-    // el clip de video deja de reproducir su audio. Se rechaza si el medio no tiene audio
-    // o si el audio ya estaba separado.
-    OpResult separateAudio(Id clipId, Id* clipAudio = nullptr);
+    // Quita el vínculo entre un clip y su clip vinculado (se puede pedir desde cualquiera
+    // de los dos). Los clips quedan donde están. Se rechaza si no hay vínculo.
+    OpResult unlinkAudio(Id clipId);
 
     // Duración de un cuadro del lienzo (mínimo de un clip después de un trim).
     TimeUs frameDuration() const;
@@ -101,6 +110,13 @@ private:
     std::string nextTrackName(TrackKind kind) const;
     // true si [start, end) se solapa con algún clip de la pista (salvo ignorar).
     static bool overlaps(const Track& track, TimeUs start, TimeUs end, Id ignorar);
+    // Inserta una pista de audio de video para la pista de video dada, después de las
+    // demás pistas de audio de video (antes de las generales).
+    void insertAudioTrackFor(const Track& pistaVideo);
+    // Desvincula los clips cuyo clip vinculado ya no existe.
+    void repararVinculos();
+    // Mueve un clip (ya validado) a otra pista y posición.
+    void trasladar(Id clipId, Id destTrackId, TimeUs newStart);
     static void sortClips(Track& track);
     Id newId() { return nextId_++; }
     void touch();
