@@ -23,6 +23,8 @@ const COLORREF kTexto = RGB(225, 225, 225);
 const COLORREF kTextoTenue = RGB(150, 150, 150);
 const COLORREF kClipVideo = RGB(64, 104, 168);
 const COLORREF kClipAudio = RGB(60, 140, 88);
+const COLORREF kClipSilenciado = RGB(80, 90, 84);
+const COLORREF kMuteActivo = RGB(200, 70, 60);
 const COLORREF kBordeSel = RGB(255, 210, 60);
 const COLORREF kCursor = RGB(230, 60, 60);
 
@@ -118,6 +120,13 @@ CRect CTimelineWnd::RectFila(int fila) const {
 CRect CTimelineWnd::RectClip(int fila, const model::Clip& clip) const {
     const CRect f = RectFila(fila);
     return CRect(m_escala.tiempoAX(clip.timelineStart), f.top + 4, m_escala.tiempoAX(clip.timelineEnd()), f.bottom - 4);
+}
+
+CRect CTimelineWnd::RectMute(int fila) const {
+    const CRect f = RectFila(fila);
+    const int lado = 16;
+    const int top = f.top + (kAltoPista - lado) / 2;
+    return CRect(kAnchoCabecera - lado - 6, top, kAnchoCabecera - 6, top + lado);
 }
 
 const model::Clip* CTimelineWnd::ClipEn(CPoint p, int* filaOut) const {
@@ -241,7 +250,7 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         for (const model::Clip& c : pista->clips) {
             CRect rcClip = RectClip(i, c);
             if (rcClip.right < kAnchoCabecera || rcClip.left > rc.right) continue;
-            DibujarClip(dc, rcClip, c, video, c.id == sel.clipId);
+            DibujarClip(dc, rcClip, c, video, c.id == sel.clipId, pista->muted);
         }
         dc.RestoreDC(-1);
 
@@ -253,6 +262,17 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         CRect txt = cab;
         txt.DeflateRect(8, 0);
         dc.DrawText(nombre, txt, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        // Botón de mute (solo pistas de audio): relleno rojo si la pista está silenciada.
+        if (!video) {
+            const CRect m = RectMute(i);
+            if (pista->muted) dc.FillSolidRect(m, kMuteActivo);
+            CBrush borde(kTexto);
+            dc.FrameRect(m, &borde);
+            dc.SetTextColor(kTexto);
+            CRect txtM = m;
+            dc.DrawText(L"M", txtM, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
     }
 
     // Fantasma del clip que se está arrastrando (movimiento o trim).
@@ -324,8 +344,10 @@ void CTimelineWnd::DibujarRegla(CDC& dc, const CRect& rc) {
     }
 }
 
-void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado) {
-    dc.FillSolidRect(rcClip, video ? kClipVideo : kClipAudio);
+void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado,
+                               bool silenciado) {
+    // Video en azul y audio en verde (gris verdoso si la pista está silenciada).
+    dc.FillSolidRect(rcClip, video ? kClipVideo : (silenciado ? kClipSilenciado : kClipAudio));
 
     // Borde (amarillo y doble si está seleccionado).
     CBrush borde(seleccionado ? kBordeSel : RGB(20, 20, 20));
@@ -441,7 +463,12 @@ void CTimelineWnd::OnLButtonDown(UINT /*nFlags*/, CPoint point) {
     if (fila < 0) return;
     const model::Track* pista = PistasVisuales()[fila];
 
-    // 2) Cabecera: selecciona la pista.
+    // 2) Cabecera: el botón M silencia la pista de audio; el resto selecciona la pista.
+    if (pista->kind == model::TrackKind::Audio && RectMute(fila).PtInRect(point)) {
+        m_ctrl->setTrackMuted(pista->id, !pista->muted);
+        NotificarCambio(true);
+        return;
+    }
     if (point.x < kAnchoCabecera) {
         m_ctrl->seleccionarPista(pista->id);
         NotificarCambio(false);

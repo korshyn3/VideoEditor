@@ -238,6 +238,17 @@ TEST_CASE("GraphRunner: el timeline completo dura lo esperado") {
     CHECK(c.muestras == 8 * 48000);
 }
 
+TEST_CASE("GraphRunner: video con audio y música mezclados") {
+    controller::EditorController ctrl;
+    REQUIRE(ctrl.importFiles({medioPrueba("video_audio.mp4"), medioPrueba("tono.wav")}).errores.empty());
+    const engine::TimelineSnapshot snap{ctrl.project().timeline(), ctrl.project().media(), ctrl.project().canvas()};
+    const auto d = FilterGraphBuilder::build(snap, {320, 240, {25, 1}}, 0, segundosATiempo(2.0));
+    REQUIRE(contiene(d.filtros, "amix=inputs=2"));
+    const Conteo c = renderizar(d);
+    CHECK(c.cuadros == 50);
+    CHECK(c.muestras == 96000);
+}
+
 // Herramienta (omitida por defecto): imprime el grafo del timeline de prueba para
 // ejecutarlo a mano con ffmpeg.exe. Uso:
 //   EditorTests.exe -tc="Imprimir grafo de ejemplo" --no-skip

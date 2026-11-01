@@ -46,9 +46,11 @@ public:
     engine::ProbeResult analizarArchivo(const std::string& rutaUtf8) const;
 
     // ---- Acciones del usuario -----------------------------------------------
-    // Importa archivos en el orden dado. Los que tienen video van a la pista de video
-    // seleccionada (o a V1); los de solo audio, a la pista de audio seleccionada (o a la
-    // primera de audio, que se crea si no existe).
+    // Importa archivos en el orden dado, a continuación del último clip de la pista.
+    //   - Si la pista seleccionada es de audio, todos van a ella; de los videos se coloca
+    //     solo su audio (y se rechazan los que no tienen audio).
+    //   - Si no, los que tienen video van a la pista de video seleccionada (o a V1) y los
+    //     de solo audio a la primera pista de audio (que se crea si no existe).
     ImportResult importFiles(const std::vector<std::string>& rutasUtf8);
 
     model::OpResult addTrack(model::TrackKind kind);
@@ -62,6 +64,9 @@ public:
     model::OpResult trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut);
     // Elimina el clip seleccionado, dejando un hueco o cerrándolo (ripple).
     model::OpResult deleteSelectedClip(bool ripple);
+    // Separa el audio del clip de video seleccionado; la selección pasa al clip de audio.
+    model::OpResult separateAudio();
+    model::OpResult setTrackMuted(model::Id trackId, bool muted);
 
     // ---- Selección y cursor -------------------------------------------------
     void seleccionarPista(model::Id trackId);

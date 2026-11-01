@@ -52,6 +52,7 @@ protected:
     afx_msg void OnDividir();
     afx_msg void OnEliminarClip();
     afx_msg void OnEliminarClipRipple();
+    afx_msg void OnSepararAudio();
     afx_msg void OnAcercaDe();
     afx_msg LRESULT OnVistaCambio(WPARAM wParam, LPARAM lParam);
     DECLARE_MESSAGE_MAP()

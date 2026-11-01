@@ -36,7 +36,9 @@ ImportResult EditorController::importFiles(const std::vector<std::string>& rutas
             resultado.errores.push_back(probe.error);
             continue;
         }
-        const model::TrackKind kind = probe.info.hasVideo ? model::TrackKind::Video : model::TrackKind::Audio;
+        const model::Track* sel = project_.timeline().findTrack(seleccion_.trackId);
+        const bool aPistaDeAudio = (sel && sel->kind == model::TrackKind::Audio) || !probe.info.hasVideo;
+        const model::TrackKind kind = aPistaDeAudio ? model::TrackKind::Audio : model::TrackKind::Video;
         const model::Id mediaId = project_.addMedia(std::move(probe.info));
         model::Id clipId = model::kSinId;
         const model::OpResult r = project_.appendMedia(pistaDestino(kind), mediaId, &clipId);
@@ -83,6 +85,18 @@ model::OpResult EditorController::deleteSelectedClip(bool ripple) {
     model::OpResult r = project_.removeClip(seleccion_.clipId, ripple);
     validarSeleccion();
     return r;
+}
+
+model::OpResult EditorController::separateAudio() {
+    if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    model::Id audio = model::kSinId;
+    model::OpResult r = project_.separateAudio(seleccion_.clipId, &audio);
+    if (r.ok) seleccionarClip(audio);
+    return r;
+}
+
+model::OpResult EditorController::setTrackMuted(model::Id trackId, bool muted) {
+    return project_.setTrackMuted(trackId, muted);
 }
 
 void EditorController::seleccionarPista(model::Id trackId) {

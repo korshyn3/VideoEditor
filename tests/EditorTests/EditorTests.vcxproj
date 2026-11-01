@@ -76,6 +76,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MediosPrueba.cpp" />
+    <ClCompile Include="TestAudio.cpp" />
     <ClCompile Include="TestController.cpp" />
     <ClCompile Include="TestCortes.cpp" />
     <ClCompile Include="TestEscalaTiempo.cpp" />

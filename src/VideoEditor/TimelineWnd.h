@@ -11,6 +11,8 @@
 //   | A1       |   [clip de audio]                        |   <- pistas de audio
 //   +----------+------------------------------------------+
 //
+// Las pistas de audio tienen en su cabecera un botón "M" para silenciarlas (mute).
+//
 // Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
 // arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
 // un clip = menú contextual (dividir / eliminar), cuyos comandos llegan a la ventana padre.
@@ -73,6 +75,8 @@ private:
     int FilaEnY(int y) const;
     CRect RectFila(int fila) const;
     CRect RectClip(int fila, const model::Clip& clip) const;
+    // Botón de mute en la cabecera de una pista de audio.
+    CRect RectMute(int fila) const;
     // Clip bajo el punto (o nullptr) y la fila en que está.
     const model::Clip* ClipEn(CPoint p, int* fila) const;
     // Si el punto está sobre el borde izquierdo o derecho de un clip, devuelve ese clip y
@@ -84,7 +88,8 @@ private:
 
     void Dibujar(CDC& dc, const CRect& rc);
     void DibujarRegla(CDC& dc, const CRect& rc);
-    void DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado);
+    void DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& clip, bool video, bool seleccionado,
+                     bool silenciado);
 
     void MoverCursorA(int x);
     void ActualizarScroll();

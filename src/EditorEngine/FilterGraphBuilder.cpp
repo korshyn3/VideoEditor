@@ -160,35 +160,51 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     g += concatV + (nV > 1 ? "concat=n=" + std::to_string(nV) + ":v=1:a=0," : "") +
          "setpts=PTS-STARTPTS+" + seg(d.t0) + "/TB[vout];\n";
 
-    // ---- Audio: audio vinculado de los clips de V1 ----
+    // ---- Audio: una pista de la mezcla por cada fuente de sonido ----
+    // Cada pista es un concat de tramos (audio de un clip o silencio) desde T0 hasta el
+    // final. Las pistas que en ese rango solo tendrían silencio no se agregan.
     std::vector<std::string> pistasAudio;
-    {
-        std::string concatA;
+    auto pistaDeAudio = [&](const model::Track& pista, bool soloVinculado) {
+        const auto segs = segmentar(pista, d.t0, d.fin, fps);
+        const std::string prefijo = "a" + std::to_string(pistasAudio.size()) + "s";
+        std::string cadena, concatA;
         int n = 0;
-        for (size_t i = 0; i < segsV1.size(); ++i) {
-            const Segmento& s = segsV1[i];
+        bool suena = false;
+        for (size_t i = 0; i < segs.size(); ++i) {
+            const Segmento& s = segs[i];
             const TimeUs dur = s.fin - s.ini;
             if (dur <= 0) continue;
-            const std::string etiqueta = "a1s" + std::to_string(i);
+            const std::string etiqueta = prefijo + std::to_string(i);
             const model::MediaInfo* info = s.clip ? snap.media.find(s.clip->mediaId) : nullptr;
-            if (s.clip && s.clip->linkedAudio && info && info->hasAudio) {
+            if (s.clip && (!soloVinculado || s.clip->linkedAudio) && info && info->hasAudio) {
                 const GraphInput in = nuevaEntrada(*s.clip, false, s.ini, s.fin);
-                g += "[" + in.label + "]atrim=start=" + seg(in.sourceIn) + ":end=" + seg(in.sourceIn + dur) +
-                     ",asetpts=PTS-STARTPTS,aresample=48000," + kFormatoAudio + ",apad=whole_dur=" + seg(dur) +
-                     ",atrim=duration=" + seg(dur) + "[" + etiqueta + "];\n";
+                cadena += "[" + in.label + "]atrim=start=" + seg(in.sourceIn) + ":end=" + seg(in.sourceIn + dur) +
+                          ",asetpts=PTS-STARTPTS,aresample=48000," + kFormatoAudio + ",apad=whole_dur=" + seg(dur) +
+                          ",atrim=duration=" + seg(dur) + "[" + etiqueta + "];\n";
+                suena = true;
             } else {
-                g += cadenaSilencio(dur) + "[" + etiqueta + "];\n";
+                cadena += cadenaSilencio(dur) + "[" + etiqueta + "];\n";
             }
             concatA += "[" + etiqueta + "]";
             ++n;
         }
+        if (!suena) return;
+        g += cadena;
         if (n > 1) {
-            g += concatA + "concat=n=" + std::to_string(n) + ":v=0:a=1[at0];\n";
-            pistasAudio.push_back("[at0]");
-        } else if (n == 1) {
+            const std::string salidaPista = "[at" + std::to_string(pistasAudio.size()) + "]";
+            g += concatA + "concat=n=" + std::to_string(n) + ":v=0:a=1" + salidaPista + ";\n";
+            pistasAudio.push_back(salidaPista);
+        } else {
             pistasAudio.push_back(concatA);
         }
-    }
+    };
+
+    // Audio vinculado de los clips de video (de todas las pistas de video) y pistas de
+    // audio que no están silenciadas.
+    for (const model::Track& t : snap.timeline.tracks)
+        if (t.kind == model::TrackKind::Video) pistaDeAudio(t, true);
+    for (const model::Track& t : snap.timeline.tracks)
+        if (t.kind == model::TrackKind::Audio && !t.muted) pistaDeAudio(t, false);
 
     // ---- Mezcla final de audio ----
     std::string mezcla;

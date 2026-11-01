@@ -63,6 +63,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Eliminar clip	Supr",       ID_EDITAR_ELIMINAR
         MENUITEM "Eliminar clip y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
+        MENUITEM SEPARATOR
+        MENUITEM "&Separar audio",              ID_EDITAR_SEPARAR_AUDIO
     END
     POPUP "&Reproducción"
     BEGIN
@@ -89,6 +91,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Eliminar	Supr",            ID_EDITAR_ELIMINAR
         MENUITEM "Eliminar y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
+        MENUITEM SEPARATOR
+        MENUITEM "&Separar audio",              ID_EDITAR_SEPARAR_AUDIO
     END
 END
 

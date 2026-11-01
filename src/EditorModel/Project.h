@@ -49,6 +49,8 @@ public:
     OpResult addTrack(TrackKind kind, Id* nuevaPista = nullptr);
     // Elimina la pista y sus clips. Siempre debe quedar al menos una pista de video.
     OpResult removeTrack(Id trackId);
+    // Silencia (o vuelve a activar) una pista de audio.
+    OpResult setTrackMuted(Id trackId, bool muted);
 
     // ---- Clips -------------------------------------------------------------
     // Coloca el medio completo al final de la pista. En una pista de video el medio
@@ -74,6 +76,12 @@ public:
     // Elimina el clip. Con ripple, los clips posteriores de la misma pista se corren a la
     // izquierda la duración del clip eliminado; sin ripple queda un hueco.
     OpResult removeClip(Id clipId, bool ripple);
+
+    // Separa el audio de un clip de video: crea un clip de audio con el mismo medio, tramo
+    // y posición en la primera pista de audio libre en ese rango (o en una pista nueva) y
+    // el clip de video deja de reproducir su audio. Se rechaza si el medio no tiene audio
+    // o si el audio ya estaba separado.
+    OpResult separateAudio(Id clipId, Id* clipAudio = nullptr);
 
     // Duración de un cuadro del lienzo (mínimo de un clip después de un trim).
     TimeUs frameDuration() const;

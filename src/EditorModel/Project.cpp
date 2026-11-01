@@ -113,6 +113,16 @@ OpResult Project::removeTrack(Id trackId) {
     return OpResult::exito();
 }
 
+OpResult Project::setTrackMuted(Id trackId, bool muted) {
+    Track* t = findTrackMut(trackId);
+    if (!t) return OpResult::fallo("La pista no existe.");
+    if (t->kind != TrackKind::Audio) return OpResult::fallo("Solo se pueden silenciar las pistas de audio.");
+    if (t->muted == muted) return OpResult::exito();
+    t->muted = muted;
+    touch();
+    return OpResult::exito();
+}
+
 OpResult Project::appendMedia(Id trackId, Id mediaId, Id* nuevoClip) {
     Track* track = findTrackMut(trackId);
     if (!track) return OpResult::fallo("La pista no existe.");
@@ -241,6 +251,54 @@ OpResult Project::removeClip(Id clipId, bool ripple) {
         for (Clip& c : track->clips)
             if (c.timelineStart >= fin) c.timelineStart -= duracion;
     }
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::separateAudio(Id clipId, Id* clipAudio) {
+    const Track* pistaVideo = nullptr;
+    const Clip* clip = timeline_.findClip(clipId, &pistaVideo);
+    if (!clip) return OpResult::fallo("El clip no existe.");
+    if (pistaVideo->kind != TrackKind::Video)
+        return OpResult::fallo("Solo se puede separar el audio de un clip de video.");
+    const MediaInfo* info = media_.find(clip->mediaId);
+    if (!info || !info->hasAudio) return OpResult::fallo("El clip no tiene audio que separar.");
+    if (!clip->linkedAudio) return OpResult::fallo("El audio de este clip ya está separado.");
+
+    // Clip de audio: mismo medio, tramo y posición (sin efectos: son de video).
+    Clip audio;
+    audio.id = newId();
+    audio.mediaId = clip->mediaId;
+    audio.sourceIn = clip->sourceIn;
+    audio.sourceOut = clip->sourceOut;
+    audio.timelineStart = clip->timelineStart;
+
+    // Primera pista de audio libre en ese rango; si no hay, una nueva.
+    Track* destino = nullptr;
+    for (Track& t : timeline_.tracks) {
+        if (t.kind == TrackKind::Audio && !overlaps(t, audio.timelineStart, audio.timelineEnd(), kSinId)) {
+            destino = &t;
+            break;
+        }
+    }
+    Track nueva;
+    if (!destino) {
+        nueva.id = newId();
+        nueva.kind = TrackKind::Audio;
+        nueva.name = nextTrackName(TrackKind::Audio);
+    }
+
+    // A partir de aquí ya no puede fallar. (Agregar una pista puede mover el vector de
+    // pistas en memoria, por eso el clip de video se busca de nuevo al final.)
+    if (!destino) {
+        timeline_.tracks.push_back(nueva);
+        destino = &timeline_.tracks.back();
+    }
+    destino->clips.push_back(audio);
+    sortClips(*destino);
+    findClipMut(clipId)->linkedAudio = false;
+
+    if (clipAudio) *clipAudio = audio.id;
     touch();
     return OpResult::exito();
 }

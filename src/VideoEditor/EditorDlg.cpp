@@ -59,6 +59,8 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_COMMAND(ID_EDITAR_DIVIDIR, &CEditorDlg::OnDividir)
     ON_COMMAND(ID_EDITAR_ELIMINAR, &CEditorDlg::OnEliminarClip)
     ON_COMMAND(ID_EDITAR_ELIMINAR_RIPPLE, &CEditorDlg::OnEliminarClipRipple)
+    ON_BN_CLICKED(IDC_BTN_SEPARAR_AUDIO, &CEditorDlg::OnSepararAudio)
+    ON_COMMAND(ID_EDITAR_SEPARAR_AUDIO, &CEditorDlg::OnSepararAudio)
     ON_COMMAND(ID_AYUDA_ACERCA, &CEditorDlg::OnAcercaDe)
     ON_MESSAGE(WM_APP_VISTA_CAMBIO, &CEditorDlg::OnVistaCambio)
 END_MESSAGE_MAP()
@@ -226,6 +228,12 @@ void CEditorDlg::OnEliminarClipRipple() {
     ResultadoSilencioso(m_controller.deleteSelectedClip(true));
 }
 
+void CEditorDlg::OnSepararAudio() {
+    // A diferencia de dividir, aquí el motivo del rechazo (clip sin audio, audio ya
+    // separado) sí se explica con un mensaje.
+    MostrarResultado(m_controller.separateAudio());
+}
+
 void CEditorDlg::OnAcercaDe() {
     AfxMessageBox(L"Editor de video\r\nProyecto académico: C++20, MFC y FFmpeg (arquitectura MVC).",
                   MB_ICONINFORMATION);
@@ -326,6 +334,9 @@ void CEditorDlg::ActualizarPropiedades() {
     const model::Track* pista = nullptr;
     const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista);
     GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(clip != nullptr);
+    // "Separar audio" solo tiene sentido en un clip de video que aún reproduce su audio.
+    GetDlgItem(IDC_BTN_SEPARAR_AUDIO)
+        ->EnableWindow(clip != nullptr && pista->kind == model::TrackKind::Video && clip->linkedAudio);
     if (clip) {
         t += L"CLIP (pista " + CStringDesdeUtf8(pista->name) + L")\r\n";
         t += L"Posición: " + TextoTiempo(clip->timelineStart) + L" → " + TextoTiempo(clip->timelineEnd()) + L"\r\n";

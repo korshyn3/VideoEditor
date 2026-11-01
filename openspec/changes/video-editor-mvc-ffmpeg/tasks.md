@@ -40,9 +40,9 @@
 
 ## 5. Fase 5 — Pistas de audio (separar / agregar)
 
-- [ ] 5.1 Implementar `separateAudio` en el modelo (clip de audio en pista libre o nueva, desvincular audio del video, rechazo si no hay audio); verificar con tests "Separar audio" y "Clip sin audio"
+- [x] 5.1 Implementar `separateAudio` en el modelo (clip de audio en pista libre o nueva, desvincular audio del video, rechazo si no hay audio); verificar con tests "Separar audio" y "Clip sin audio"
 - [ ] 5.2 Extender `FilterGraphBuilder` con clips de pistas de audio (atrim + adelay) y omitir pistas silenciadas; verificar con tests de cadena y a mano los escenarios "Mover el audio separado", "Borrar el audio separado", "Música sobre video con audio" y "Pista silenciada"
-- [ ] 5.3 Implementar importación de mp3/wav/aac en la pista de audio seleccionada y la colocación solo-audio de archivos de video en pistas de audio; verificar con tests "Importar música" e "Importar video en pista de audio"
+- [x] 5.3 Implementar importación de mp3/wav/aac en la pista de audio seleccionada y la colocación solo-audio de archivos de video en pistas de audio; verificar con tests "Importar música" e "Importar video en pista de audio"
 - [ ] 5.4 Dibujar los clips de audio con otro color en `CTimelineWnd`, añadir el botón de mute en la cabecera de cada pista y la acción "Separar audio" (botón y menú contextual); verificar a mano el flujo completo separar → mover → borrar
 
 ## 6. Fase 6 — Efectos
