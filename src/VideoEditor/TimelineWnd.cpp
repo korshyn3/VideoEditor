@@ -462,6 +462,14 @@ void CTimelineWnd::DibujarClip(CDC& dc, const CRect& rcClip, const model::Clip& 
     const model::MediaInfo* info = m_ctrl->project().media().find(clip.mediaId);
     CString texto = info ? NombreArchivo(info->path) : CString(L"(medio desconocido)");
     if (clip.vinculado()) texto = L"↔ " + texto;
+    // Un clip cuyo medio no se encontró al abrir el proyecto: rayado rojo y "OFFLINE".
+    if (!info || info->offline) {
+        CRect interior = rcClip;
+        interior.DeflateRect(2, 2);
+        CBrush rayas(HS_BDIAGONAL, RGB(200, 40, 40));
+        dc.FillRect(interior, &rayas);
+        texto = L"OFFLINE: " + texto;
+    }
     CRect txt = rcClip;
     txt.DeflateRect(6, 0);
     dc.SetTextColor(kTexto);

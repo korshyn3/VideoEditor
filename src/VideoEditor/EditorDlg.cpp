@@ -52,6 +52,10 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_WM_GETMINMAXINFO()
     ON_BN_CLICKED(IDC_BTN_IMPORTAR, &CEditorDlg::OnImportar)
     ON_COMMAND(ID_ARCHIVO_IMPORTAR, &CEditorDlg::OnImportar)
+    ON_COMMAND(ID_ARCHIVO_NUEVO, &CEditorDlg::OnNuevo)
+    ON_COMMAND(ID_ARCHIVO_ABRIR, &CEditorDlg::OnAbrir)
+    ON_COMMAND(ID_ARCHIVO_GUARDAR, &CEditorDlg::OnGuardar)
+    ON_COMMAND(ID_ARCHIVO_GUARDAR_COMO, &CEditorDlg::OnGuardarComo)
     ON_BN_CLICKED(IDC_BTN_EXPORTAR, &CEditorDlg::OnExportar)
     ON_COMMAND(ID_ARCHIVO_EXPORTAR, &CEditorDlg::OnExportar)
     ON_COMMAND(ID_ARCHIVO_SALIR, &CEditorDlg::OnSalir)
@@ -134,8 +138,85 @@ BOOL CEditorDlg::PreTranslateMessage(MSG* pMsg) {
 }
 
 void CEditorDlg::OnClose() {
-    // (Fase 10: aquí se preguntará por los cambios sin guardar.)
+    if (!ConfirmarCambios()) return;  // el usuario canceló el cierre
     EndDialog(IDOK);
+}
+
+namespace {
+
+const wchar_t* kFiltroProyecto = L"Proyecto del editor (*.json)|*.json|Todos los archivos (*.*)|*.*||";
+
+} // namespace
+
+bool CEditorDlg::ConfirmarCambios() {
+    if (!m_controller.project().dirty()) return true;
+    const int r = AfxMessageBox(L"El proyecto tiene cambios sin guardar. ¿Guardarlos?", MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (r == IDCANCEL) return false;
+    if (r == IDNO) return true;
+    return Guardar(false);
+}
+
+bool CEditorDlg::Guardar(bool preguntarRuta) {
+    std::string ruta = m_controller.rutaProyecto();
+    if (preguntarRuta || ruta.empty()) {
+        CFileDialog dlg(FALSE, L"json", ruta.empty() ? L"proyecto" : CStringDesdeUtf8(ruta).GetString(),
+                        OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_EXPLORER, kFiltroProyecto, this);
+        if (dlg.DoModal() != IDOK) return false;
+        ruta = Utf8DesdeCString(dlg.GetPathName());
+    }
+    const model::OpResult r = m_controller.guardar(ruta);
+    if (!r) AfxMessageBox(CStringDesdeUtf8(r.error), MB_ICONERROR);
+    ActualizarTitulo();
+    return r.ok;
+}
+
+void CEditorDlg::ActualizarTitulo() {
+    const std::string& ruta = m_controller.rutaProyecto();
+    CString nombre = L"Sin título";
+    if (!ruta.empty()) {
+        nombre = CStringDesdeUtf8(ruta);
+        const int barra = std::max(nombre.ReverseFind(L'\\'), nombre.ReverseFind(L'/'));
+        if (barra >= 0) nombre = nombre.Mid(barra + 1);
+    }
+    CString titulo = nombre + (m_controller.project().dirty() ? L" *" : L"") + L" - Editor de video";
+    CString actual;
+    GetWindowText(actual);
+    if (actual != titulo) SetWindowText(titulo);
+}
+
+void CEditorDlg::OnNuevo() {
+    if (!ConfirmarCambios()) return;
+    m_controller.nuevoProyecto();
+    RefrescarVista();
+    ProgramarSincronizacion();
+}
+
+void CEditorDlg::OnAbrir() {
+    if (!ConfirmarCambios()) return;
+    CFileDialog dlg(TRUE, L"json", nullptr, OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER, kFiltroProyecto, this);
+    if (dlg.DoModal() != IDOK) return;
+    CWaitCursor espera;  // se vuelven a analizar todos los medios
+    const controller::CargaResult r = m_controller.abrir(Utf8DesdeCString(dlg.GetPathName()));
+    RefrescarVista();
+    ProgramarSincronizacion();
+    if (!r.r.ok) {
+        AfxMessageBox(CStringDesdeUtf8(r.r.error), MB_ICONERROR);
+        return;
+    }
+    if (!r.faltantes.empty()) {
+        CString msg = L"No se encontraron estos archivos. Sus clips quedan marcados como OFFLINE (se ven en negro y "
+                      L"sin sonido):\r\n\r\n";
+        for (const std::string& f : r.faltantes) msg += L"• " + CStringDesdeUtf8(f) + L"\r\n";
+        AfxMessageBox(msg, MB_ICONWARNING);
+    }
+}
+
+void CEditorDlg::OnGuardar() {
+    Guardar(false);
+}
+
+void CEditorDlg::OnGuardarComo() {
+    Guardar(true);
 }
 
 void CEditorDlg::OnDestroy() {
@@ -369,6 +450,7 @@ void CEditorDlg::RefrescarVista() {
 void CEditorDlg::ActualizarPropiedades() {
     const model::Project& p = m_controller.project();
     const controller::Seleccion& sel = m_controller.seleccion();
+    ActualizarTitulo();
 
     // Tiempo del cursor / duración total.
     SetDlgItemText(IDC_STATIC_TIEMPO, TextoTiempo(m_controller.playhead()) + L" / " +

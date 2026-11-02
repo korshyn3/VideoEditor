@@ -46,6 +46,10 @@ protected:
     afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
     afx_msg void OnImportar();
+    afx_msg void OnNuevo();
+    afx_msg void OnAbrir();
+    afx_msg void OnGuardar();
+    afx_msg void OnGuardarComo();
     afx_msg void OnExportar();
     afx_msg void OnSalir();
     afx_msg void OnAgregarPistaVideo();
@@ -62,6 +66,13 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
+    // Si hay cambios sin guardar, pregunta si guardarlos. false = el usuario canceló (o
+    // falló el guardado) y la acción (cerrar, nuevo, abrir) no debe seguir.
+    bool ConfirmarCambios();
+    // Guarda en la ruta del proyecto o, si no tiene, pregunta dónde. true si se guardó.
+    bool Guardar(bool preguntarRuta);
+    // Título de la ventana: nombre del proyecto y "*" si hay cambios sin guardar.
+    void ActualizarTitulo();
     // Actualiza todo lo que depende del modelo / selección (timeline, propiedades, tiempo).
     void RefrescarVista();
     void ActualizarPropiedades();

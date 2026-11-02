@@ -53,6 +53,11 @@ IDR_MENU_PRINCIPAL MENU
 BEGIN
     POPUP "&Archivo"
     BEGIN
+        MENUITEM "&Nuevo proyecto\tCtrl+N",      ID_ARCHIVO_NUEVO
+        MENUITEM "&Abrir proyecto…\tCtrl+O",     ID_ARCHIVO_ABRIR
+        MENUITEM "&Guardar proyecto\tCtrl+S",    ID_ARCHIVO_GUARDAR
+        MENUITEM "Guardar proyecto &como…",      ID_ARCHIVO_GUARDAR_COMO
+        MENUITEM SEPARATOR
         MENUITEM "&Importar…\tCtrl+I",          ID_ARCHIVO_IMPORTAR
         MENUITEM "&Exportar…\tCtrl+E",          ID_ARCHIVO_EXPORTAR
         MENUITEM SEPARATOR
@@ -119,6 +124,9 @@ END
 IDR_ACCEL_PRINCIPAL ACCELERATORS
 BEGIN
     "I",            ID_ARCHIVO_IMPORTAR,    VIRTKEY, CONTROL, NOINVERT
+    "N",            ID_ARCHIVO_NUEVO,       VIRTKEY, CONTROL, NOINVERT
+    "O",            ID_ARCHIVO_ABRIR,       VIRTKEY, CONTROL, NOINVERT
+    "S",            ID_ARCHIVO_GUARDAR,     VIRTKEY, CONTROL, NOINVERT
     "E",            ID_ARCHIVO_EXPORTAR,    VIRTKEY, CONTROL, NOINVERT
     VK_SPACE,       ID_REPRODUCIR_PLAY,     VIRTKEY, NOINVERT
     "S",            ID_EDITAR_DIVIDIR,      VIRTKEY, NOINVERT

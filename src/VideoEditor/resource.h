@@ -81,13 +81,17 @@
 #define ID_EDITAR_AGREGAR_TRANSICION    32782
 #define ID_EDITAR_QUITAR_TRANSICION     32783
 #define ID_ARCHIVO_EXPORTAR             32784
+#define ID_ARCHIVO_NUEVO                32785
+#define ID_ARCHIVO_ABRIR                32786
+#define ID_ARCHIVO_GUARDAR              32787
+#define ID_ARCHIVO_GUARDAR_COMO         32788
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        110
-#define _APS_NEXT_COMMAND_VALUE         32785
+#define _APS_NEXT_COMMAND_VALUE         32789
 #define _APS_NEXT_CONTROL_VALUE         1056
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
