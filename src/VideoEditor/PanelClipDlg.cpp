@@ -84,6 +84,15 @@ CString TextoEfecto(size_t indice, const model::Effect& e, model::TimeUs duracio
     return texto;
 }
 
+// Sección PiP: un slider por valor, en centésimas.
+const int kPipEtiqueta[4] = {IDC_PIP_ETQ1, IDC_PIP_ETQ2, IDC_PIP_ETQ3, IDC_PIP_ETQ4};
+const int kPipSlider[4] = {IDC_PIP_SLIDER1, IDC_PIP_SLIDER2, IDC_PIP_SLIDER3, IDC_PIP_SLIDER4};
+const int kPipValor[4] = {IDC_PIP_VALOR1, IDC_PIP_VALOR2, IDC_PIP_VALOR3, IDC_PIP_VALOR4};
+
+double& ValorPip(model::PipTransform& t, int i) {
+    return i == 0 ? t.x : i == 1 ? t.y : i == 2 ? t.scale : t.opacity;
+}
+
 const int kEtiqueta[2] = {IDC_FX_ETQ1, IDC_FX_ETQ2};
 const int kSlider[2] = {IDC_FX_SLIDER1, IDC_FX_SLIDER2};
 const int kValor[2] = {IDC_FX_VALOR1, IDC_FX_VALOR2};
@@ -98,6 +107,7 @@ BEGIN_MESSAGE_MAP(CPanelClipDlg, CDialogEx)
     ON_BN_CLICKED(IDC_FX_QUITAR, &CPanelClipDlg::OnQuitarEfecto)
     ON_LBN_SELCHANGE(IDC_FX_LISTA, &CPanelClipDlg::OnCambioSeleccionEfecto)
     ON_WM_HSCROLL()
+    ON_WM_SIZE()
 END_MESSAGE_MAP()
 
 void CPanelClipDlg::DoDataExchange(CDataExchange* pDX) {
@@ -106,6 +116,7 @@ void CPanelClipDlg::DoDataExchange(CDataExchange* pDX) {
     DDX_Control(pDX, IDC_FX_LISTA, m_lista);
     DDX_Control(pDX, IDC_FX_SLIDER1, m_slider[0]);
     DDX_Control(pDX, IDC_FX_SLIDER2, m_slider[1]);
+    for (int i = 0; i < 4; ++i) DDX_Control(pDX, kPipSlider[i], m_pip[i]);
 }
 
 BOOL CPanelClipDlg::OnInitDialog() {
@@ -114,7 +125,48 @@ BOOL CPanelClipDlg::OnInitDialog() {
     for (int tipo = 0; tipo < model::kTiposEfecto; ++tipo) m_comboTipo.AddString(CStringDesdeUtf8(model::nombreEfecto(tipo)));
     m_comboTipo.SetCurSel(0);
     MostrarEfectos();
+    for (int i = 0; i < 4; ++i) m_pip[i].SetRange(i == 2 ? std::lround(model::PipTransform::kEscalaMin * 100) : 0, 100);
+    MostrarPip(m_pipMostrado);
+    ColocarInfo();
     return TRUE;
+}
+
+void CPanelClipDlg::OnSize(UINT nType, int cx, int cy) {
+    CDialogEx::OnSize(nType, cx, cy);
+    ColocarInfo();
+}
+
+void CPanelClipDlg::ColocarInfo() {
+    CWnd* info = GetDlgItem(IDC_CLIP_INFO);
+    if (!info) return;
+    // Debajo de la sección PiP si se ve; si no, debajo de los parámetros de efectos.
+    CWnd* ultimo = GetDlgItem(m_seccionPip ? IDC_PIP_SLIDER4 : IDC_FX_VALOR2);
+    if (!ultimo) return;
+    CRect rcUltimo, rc;
+    ultimo->GetWindowRect(&rcUltimo);
+    ScreenToClient(&rcUltimo);
+    GetClientRect(&rc);
+    rc.top = rcUltimo.bottom + 6;
+    if (rc.bottom > rc.top) info->MoveWindow(rc);
+}
+
+void CPanelClipDlg::MostrarSeccionPip(bool mostrar) {
+    if (mostrar == m_seccionPip) return;
+    m_seccionPip = mostrar;
+    for (int i = 0; i < 4; ++i)
+        for (int id : {kPipEtiqueta[i], kPipSlider[i], kPipValor[i]}) GetDlgItem(id)->ShowWindow(mostrar ? SW_SHOW : SW_HIDE);
+    ColocarInfo();
+}
+
+void CPanelClipDlg::MostrarPip(const model::PipTransform& t) {
+    m_pipMostrado = t;
+    for (int i = 0; i < 4; ++i) {
+        const double v = ValorPip(m_pipMostrado, i);
+        m_pip[i].SetPos(std::lround(v * 100));
+        CString texto;
+        texto.Format(L"%.2f", v);
+        SetDlgItemText(kPipValor[i], texto);
+    }
 }
 
 BOOL CPanelClipDlg::PreTranslateMessage(MSG* pMsg) {
@@ -142,6 +194,7 @@ void CPanelClipDlg::MostrarClip(const model::Clip& clip, const CString& info) {
         SetDlgItemText(IDC_CLIP_IN, TextoSegundos(clip.sourceIn));
         SetDlgItemText(IDC_CLIP_OUT, TextoSegundos(clip.sourceOut));
     }
+    if (clipNuevo || clip.transform != m_pipMostrado) MostrarPip(clip.transform);
     if (clipNuevo || clip.effects != m_efectos || clip.duration() != m_duracionClip) {
         if (clipNuevo) m_efectoElegido = clip.effects.empty() ? -1 : 0;
         m_efectos = clip.effects;
@@ -253,6 +306,14 @@ void CPanelClipDlg::AplicarValorEscrito(int i) {
 
 void CPanelClipDlg::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar) {
     const int id = pScrollBar ? pScrollBar->GetDlgCtrlID() : 0;
+    for (int i = 0; i < 4; ++i) {
+        if (id != kPipSlider[i]) continue;
+        // View -> Controller, en vivo mientras se arrastra (el modelo limita los valores).
+        model::PipTransform t = m_pipMostrado;
+        ValorPip(t, i) = m_pip[i].GetPos() / 100.0;
+        if (m_ctrl && t != m_pipMostrado) Notificar(m_ctrl->setPipTransform(m_clipId, t));
+        return;
+    }
     if ((id == IDC_FX_SLIDER1 || id == IDC_FX_SLIDER2) && m_efectoElegido >= 0) {
         const int i = (id == IDC_FX_SLIDER1) ? 0 : 1;
         Parametro p[2];

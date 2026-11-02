@@ -176,6 +176,18 @@ BEGIN
     LTEXT           "",IDC_FX_ETQ2,0,114,42,8
     CONTROL         "",IDC_FX_SLIDER2,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,42,112,88,14
     EDITTEXT        IDC_FX_VALOR2,132,112,38,12,ES_AUTOHSCROLL
+    LTEXT           "PiP X:",IDC_PIP_ETQ1,0,134,44,8
+    CONTROL         "",IDC_PIP_SLIDER1,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,44,132,96,12
+    LTEXT           "",IDC_PIP_VALOR1,142,134,28,8
+    LTEXT           "PiP Y:",IDC_PIP_ETQ2,0,147,44,8
+    CONTROL         "",IDC_PIP_SLIDER2,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,44,145,96,12
+    LTEXT           "",IDC_PIP_VALOR2,142,147,28,8
+    LTEXT           "PiP escala:",IDC_PIP_ETQ3,0,160,44,8
+    CONTROL         "",IDC_PIP_SLIDER3,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,44,158,96,12
+    LTEXT           "",IDC_PIP_VALOR3,142,160,28,8
+    LTEXT           "PiP opacidad:",IDC_PIP_ETQ4,0,173,44,8
+    CONTROL         "",IDC_PIP_SLIDER4,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,44,171,96,12
+    LTEXT           "",IDC_PIP_VALOR4,142,173,28,8
     EDITTEXT        IDC_CLIP_INFO,0,130,170,70,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
 END
 
@@ -274,7 +286,19 @@ BEGIN
     0, 0, 0, 0,
     0, 0, 0, 0,
     0, 0, 0, 0,
-    0, 0, 100, 100
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0
 END
 
 IDD_PROP_TRANSICION AFX_DIALOG_LAYOUT

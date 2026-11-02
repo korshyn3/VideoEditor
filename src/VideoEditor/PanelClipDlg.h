@@ -7,10 +7,11 @@
 //     en segundos ("Aplicar" o Enter);
 //   - editar su lista de efectos: agregar (combo + "Agregar"), subir, bajar y quitar, y
 //     cambiar los parámetros del efecto elegido con un slider (en vivo) o escribiendo el
-//     valor y pulsando Enter.
+//     valor y pulsando Enter;
+//   - en las pistas superiores a V1, cambiar su PiP (posición x/y, escala y opacidad)
+//     con sliders, en vivo.
 // Cada cambio se pide al controller y después se avisa a la ventana principal con
 // WM_APP_VISTA_CAMBIO (que redibuja el timeline y actualiza el preview).
-// (La fase 8 agrega aquí la sección de PiP.)
 #pragma once
 
 #ifndef __AFXWIN_H__
@@ -37,6 +38,8 @@ public:
     void HabilitarRecorte(bool habilitar);
     // Los efectos solo están disponibles para un clip de video.
     void HabilitarEfectos(bool habilitar);
+    // La sección PiP solo se ve con un clip de una pista superior a V1.
+    void MostrarSeccionPip(bool mostrar);
 
     // Un parámetro editable de un efecto (para el slider y el cuadro de texto).
     struct Parametro {
@@ -62,6 +65,7 @@ protected:
     afx_msg void OnQuitarEfecto();
     afx_msg void OnCambioSeleccionEfecto();
     afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+    afx_msg void OnSize(UINT nType, int cx, int cy);
     DECLARE_MESSAGE_MAP()
 
 private:
@@ -75,6 +79,10 @@ private:
     void AplicarValorEscrito(int i);
     // Avisa a la ventana principal; si la operación falló, muestra el mensaje.
     void Notificar(const model::OpResult& r);
+    void MostrarPip(const model::PipTransform& t);
+    // El cuadro de información ocupa desde debajo de la última sección visible hasta el
+    // final del panel.
+    void ColocarInfo();
 
     controller::EditorController* m_ctrl = nullptr;
     model::Id m_clipId = model::kSinId;
@@ -89,4 +97,8 @@ private:
     CComboBox m_comboTipo;
     CListBox m_lista;
     CSliderCtrl m_slider[2];
+
+    model::PipTransform m_pipMostrado;
+    bool m_seccionPip = true;
+    CSliderCtrl m_pip[4];  // x, y, escala, opacidad (en centésimas)
 };

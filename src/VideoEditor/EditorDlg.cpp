@@ -435,6 +435,7 @@ void CEditorDlg::ActualizarPropiedades() {
         m_panelClip.HabilitarRecorte(!sel.multiple());
         // Los efectos son de los clips de video, de a uno.
         m_panelClip.HabilitarEfectos(pista->kind == model::TrackKind::Video && !sel.multiple());
+        m_panelClip.MostrarSeccionPip(p.esPistaSuperior(pista->id) && !sel.multiple());
         m_panelMedio.ShowWindow(SW_HIDE);
         m_panelClip.ShowWindow(SW_SHOW);
     } else {

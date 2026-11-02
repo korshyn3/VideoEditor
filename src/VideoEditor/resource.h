@@ -42,6 +42,18 @@
 #define IDC_TR_APLICAR                  1029
 #define IDC_TR_QUITAR                   1030
 #define IDC_TR_INFO                     1031
+#define IDC_PIP_ETQ1                    1032
+#define IDC_PIP_ETQ2                    1033
+#define IDC_PIP_ETQ3                    1034
+#define IDC_PIP_ETQ4                    1035
+#define IDC_PIP_SLIDER1                 1036
+#define IDC_PIP_SLIDER2                 1037
+#define IDC_PIP_SLIDER3                 1038
+#define IDC_PIP_SLIDER4                 1039
+#define IDC_PIP_VALOR1                  1040
+#define IDC_PIP_VALOR2                  1041
+#define IDC_PIP_VALOR3                  1042
+#define IDC_PIP_VALOR4                  1043
 #define ID_ARCHIVO_IMPORTAR             32771
 #define ID_ARCHIVO_SALIR                32772
 #define ID_PISTAS_AGREGAR_VIDEO         32773
@@ -62,7 +74,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        109
 #define _APS_NEXT_COMMAND_VALUE         32784
-#define _APS_NEXT_CONTROL_VALUE         1032
+#define _APS_NEXT_CONTROL_VALUE         1044
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
