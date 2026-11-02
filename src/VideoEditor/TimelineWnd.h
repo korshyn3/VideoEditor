@@ -16,6 +16,10 @@
 // "M" para silenciarlas (mute). Los clips vinculados (video <-> su audio) llevan la marca
 // "↔" y se mueven y recortan juntos: el arrastre muestra el fantasma de los dos.
 //
+// Selección múltiple: Ctrl+clic agrega o quita un clip; arrastrar un clip seleccionado
+// mueve todo el grupo (cada clip en su pista). Soltar con Shift = sobrescribir: los clips
+// de debajo se recortan para dejar lugar.
+//
 // Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
 // arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
 // un clip = menú contextual (dividir / eliminar), cuyos comandos llegan a la ventana padre.
@@ -112,6 +116,7 @@ private:
     model::TimeUs m_inicioOriginal = 0;
     model::TimeUs m_inicioFantasma = 0;      // posición propuesta durante el arrastre
     model::Id m_pistaFantasma = model::kSinId;
+    bool m_arrastreGrupo = false;  // se arrastra una selección múltiple
     model::TimeUs m_trimIn = 0;   // tramo propuesto durante un trim
     model::TimeUs m_trimOut = 0;
 };

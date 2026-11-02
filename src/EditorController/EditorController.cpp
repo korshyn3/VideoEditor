@@ -71,15 +71,39 @@ model::OpResult EditorController::removeTrack(model::Id trackId) {
     return r;
 }
 
-model::OpResult EditorController::moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart) {
-    model::OpResult r = project_.moveClip(clipId, destTrackId, newStart);
+model::OpResult EditorController::moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart,
+                                           bool sobrescribir) {
+    model::OpResult r = project_.moveClip(clipId, destTrackId, newStart, sobrescribir);
     if (r.ok) seleccionarClip(clipId);  // la pista seleccionada pasa a ser la del clip
+    validarSeleccion();                 // (sobrescribir puede haber eliminado clips)
+    return r;
+}
+
+model::OpResult EditorController::moverSeleccion(model::TimeUs delta, bool sobrescribir) {
+    if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    model::OpResult r = project_.moveClips(seleccion_.clips, delta, sobrescribir);
+    validarSeleccion();
     return r;
 }
 
 model::OpResult EditorController::splitAtPlayhead() {
-    if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
-    return project_.split(seleccion_.clipId, playhead_);
+    if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    const model::Project antes = project_;  // para deshacer si algo falla
+    bool alguno = false;
+    for (model::Id id : seleccion_.clips) {
+        // Un clip que ya no está bajo el cursor se salta: p. ej. el audio vinculado de un
+        // video seleccionado, que se dividió junto con él.
+        const model::Clip* c = project_.timeline().findClip(id);
+        if (!c || playhead_ <= c->timelineStart || playhead_ >= c->timelineEnd()) continue;
+        const model::OpResult r = project_.split(id, playhead_);
+        if (!r.ok) {
+            project_ = antes;
+            return r;
+        }
+        alguno = true;
+    }
+    if (!alguno) return model::OpResult::fallo("El cursor no está dentro de ningún clip seleccionado.");
+    return model::OpResult::exito();
 }
 
 model::OpResult EditorController::trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut) {
@@ -89,14 +113,28 @@ model::OpResult EditorController::trimClip(model::Id clipId, model::TimeUs newIn
 }
 
 model::OpResult EditorController::deleteSelectedClip(bool ripple) {
-    if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
-    model::OpResult r = project_.removeClip(seleccion_.clipId, ripple);
+    if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    // De derecha a izquierda: así el ripple de un clip no corre a los que faltan borrar.
+    std::vector<model::Id> ids = seleccion_.clips;
+    const model::Timeline& tl = project_.timeline();
+    std::sort(ids.begin(), ids.end(),
+              [&tl](model::Id a, model::Id b) { return tl.findClip(a)->timelineStart > tl.findClip(b)->timelineStart; });
+    const model::Project antes = project_;
+    for (model::Id id : ids) {
+        if (!project_.timeline().findClip(id)) continue;  // ya se fue con su vinculado
+        const model::OpResult r = project_.removeClip(id, ripple);
+        if (!r.ok) {
+            project_ = antes;
+            return r;
+        }
+    }
     validarSeleccion();
-    return r;
+    return model::OpResult::exito();
 }
 
 model::OpResult EditorController::unlinkAudio() {
     if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
+    if (seleccion_.multiple()) return model::OpResult::fallo("Para desvincular, selecciona un solo clip.");
     return project_.unlinkAudio(seleccion_.clipId);
 }
 
@@ -107,7 +145,7 @@ model::OpResult EditorController::setTrackMuted(model::Id trackId, bool muted) {
 void EditorController::seleccionarPista(model::Id trackId) {
     if (project_.timeline().findTrack(trackId)) {
         seleccion_.trackId = trackId;
-        seleccion_.clipId = model::kSinId;
+        limpiarSeleccionClip();
     }
 }
 
@@ -115,12 +153,28 @@ void EditorController::seleccionarClip(model::Id clipId) {
     const model::Track* pista = nullptr;
     if (project_.timeline().findClip(clipId, &pista)) {
         seleccion_.clipId = clipId;
+        seleccion_.clips = {clipId};
+        seleccion_.trackId = pista->id;
+    }
+}
+
+void EditorController::alternarSeleccionClip(model::Id clipId) {
+    const model::Track* pista = nullptr;
+    if (!project_.timeline().findClip(clipId, &pista)) return;
+    if (seleccion_.contiene(clipId)) {
+        std::erase(seleccion_.clips, clipId);
+        // El principal pasa a ser el último que queda seleccionado.
+        seleccion_.clipId = seleccion_.clips.empty() ? model::kSinId : seleccion_.clips.back();
+    } else {
+        seleccion_.clips.push_back(clipId);
+        seleccion_.clipId = clipId;
         seleccion_.trackId = pista->id;
     }
 }
 
 void EditorController::limpiarSeleccionClip() {
     seleccion_.clipId = model::kSinId;
+    seleccion_.clips.clear();
 }
 
 void EditorController::setPlayhead(model::TimeUs t) {
@@ -178,7 +232,9 @@ std::string EditorController::errorPreview() const {
 
 void EditorController::validarSeleccion() {
     const model::Timeline& tl = project_.timeline();
-    if (!tl.findClip(seleccion_.clipId)) seleccion_.clipId = model::kSinId;
+    std::erase_if(seleccion_.clips, [&tl](model::Id id) { return !tl.findClip(id); });
+    if (!seleccion_.contiene(seleccion_.clipId))
+        seleccion_.clipId = seleccion_.clips.empty() ? model::kSinId : seleccion_.clips.back();
     if (!tl.findTrack(seleccion_.trackId)) {
         const model::Track* v1 = tl.firstTrack(model::TrackKind::Video);
         seleccion_.trackId = v1 ? v1->id : model::kSinId;

@@ -69,8 +69,16 @@ public:
     // Mueve un clip a otra posición y/o a otra pista del mismo tipo. Si está vinculado,
     // su clip vinculado se mueve igual: el audio va a la pista de audio de la pista de
     // video destino (y un audio vinculado solo se mueve en el tiempo: su pista la decide
-    // su video). Se rechaza entero si algún clip se solaparía con otro.
-    OpResult moveClip(Id clipId, Id destTrackId, TimeUs newStart);
+    // su video). Se rechaza entero si algún clip se solaparía con otro, salvo que se pida
+    // sobrescribir: entonces los clips de debajo se recortan (ver moveClips).
+    OpResult moveClip(Id clipId, Id destTrackId, TimeUs newStart, bool sobrescribir = false);
+
+    // Mueve varios clips (y sus vinculados) el mismo tiempo, cada uno en su pista. Con
+    // `sobrescribir`, los clips que quedarían debajo se recortan para dejar lugar: si
+    // quedan tapados se eliminan, si se tapa su inicio o su final se recorta esa parte, y
+    // si se tapa su medio se dividen y se quita lo tapado (con el mismo corte en su clip
+    // vinculado). Sin sobrescribir, cualquier solape rechaza el movimiento entero.
+    OpResult moveClips(const std::vector<Id>& clipIds, TimeUs delta, bool sobrescribir = false);
 
     // Divide el clip (y su vinculado) en el instante t del timeline: el original queda
     // como la parte izquierda y se crea un clip nuevo con la derecha (mismo medio,
@@ -115,8 +123,17 @@ private:
     void insertAudioTrackFor(const Track& pistaVideo);
     // Desvincula los clips cuyo clip vinculado ya no existe.
     void repararVinculos();
-    // Mueve un clip (ya validado) a otra pista y posición.
-    void trasladar(Id clipId, Id destTrackId, TimeUs newStart);
+    // Destino de un clip en un movimiento.
+    struct Destino {
+        Id clipId;
+        Id trackId;
+        TimeUs start;
+    };
+    // Aplica los movimientos (agregando los audios vinculados) sobre una copia del
+    // timeline, sobrescribiendo si se pide, y solo los acepta si no quedan solapes.
+    OpResult aplicarMovimientos(std::vector<Destino> destinos, bool sobrescribir);
+    // Quita del clip (y de su vinculado) el tramo [ini, fin) del timeline `tl`.
+    void cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin);
     static void sortClips(Track& track);
     Id newId() { return nextId_++; }
     void touch();

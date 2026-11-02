@@ -25,6 +25,8 @@ public:
     // Muestra el clip. Los cuadros de entrada/salida solo se reescriben si el clip o su
     // tramo cambiaron, para no borrar lo que el usuario está escribiendo.
     void MostrarClip(const model::Clip& clip, const CString& info);
+    // Con varios clips seleccionados el recorte no está disponible.
+    void HabilitarRecorte(bool habilitar);
 
 protected:
     // Un diálogo hijo no debe cerrarse con Enter/Esc.

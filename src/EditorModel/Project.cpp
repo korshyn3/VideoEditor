@@ -228,18 +228,7 @@ OpResult Project::appendMedia(Id trackId, Id mediaId, Id* nuevoClip) {
     return OpResult::exito();
 }
 
-void Project::trasladar(Id clipId, Id destTrackId, TimeUs newStart) {
-    Track* origen = nullptr;
-    Clip* clip = findClipMut(clipId, &origen);
-    Track* destino = findTrackMut(destTrackId);
-    Clip copia = *clip;
-    copia.timelineStart = newStart;
-    std::erase_if(origen->clips, [clipId](const Clip& c) { return c.id == clipId; });
-    destino->clips.push_back(copia);
-    sortClips(*destino);
-}
-
-OpResult Project::moveClip(Id clipId, Id destTrackId, TimeUs newStart) {
+OpResult Project::moveClip(Id clipId, Id destTrackId, TimeUs newStart, bool sobrescribir) {
     const Track* origen = nullptr;
     const Clip* clip = timeline_.findClip(clipId, &origen);
     if (!clip) return OpResult::fallo("El clip no existe.");
@@ -250,33 +239,174 @@ OpResult Project::moveClip(Id clipId, Id destTrackId, TimeUs newStart) {
     if (clip->vinculado() && origen->kind == TrackKind::Audio) {
         const Track* pistaVideo = nullptr;
         const Clip* video = timeline_.findClip(clip->linkedClipId, &pistaVideo);
-        if (video) return moveClip(video->id, pistaVideo->id, newStart);
+        if (video) return moveClip(video->id, pistaVideo->id, newStart, sobrescribir);
     }
 
     const Track* destino = timeline_.findTrack(destTrackId);
     if (!destino) return OpResult::fallo("La pista destino no existe.");
     if (destino->kind != origen->kind)
         return OpResult::fallo("Un clip solo se puede mover a una pista del mismo tipo (video o audio).");
-    const TimeUs fin = newStart + clip->duration();
-    if (overlaps(*destino, newStart, fin, clipId))
-        return OpResult::fallo("El clip se solaparía con otro clip de la pista.");
+    if (clip->vinculado() && !timeline_.audioTrackOf(destino->id))
+        return OpResult::fallo("La pista destino no tiene pista de audio.");
+    return aplicarMovimientos({{clipId, destTrackId, newStart}}, sobrescribir);
+}
 
-    // El audio vinculado va a la pista de audio de la pista de video destino.
-    const Clip* audio = clip->vinculado() ? timeline_.findClip(clip->linkedClipId) : nullptr;
-    const Track* pistaAudioDestino = nullptr;
-    if (audio) {
-        pistaAudioDestino = timeline_.audioTrackOf(destino->id);
-        if (!pistaAudioDestino) return OpResult::fallo("La pista destino no tiene pista de audio.");
-        if (overlaps(*pistaAudioDestino, newStart, fin, audio->id))
-            return OpResult::fallo("El audio vinculado se solaparía con otro clip de la pista " +
-                                   pistaAudioDestino->name + ".");
+OpResult Project::moveClips(const std::vector<Id>& clipIds, TimeUs delta, bool sobrescribir) {
+    // Cada clip se queda en su pista. Un audio vinculado se mueve a través de su video.
+    std::vector<Destino> destinos;
+    auto incluido = [&](Id id) {
+        return std::any_of(destinos.begin(), destinos.end(), [id](const Destino& d) { return d.clipId == id; });
+    };
+    for (Id id : clipIds) {
+        const Track* pista = nullptr;
+        const Clip* c = timeline_.findClip(id, &pista);
+        if (!c) return OpResult::fallo("Uno de los clips no existe.");
+        if (c->vinculado() && pista->kind == TrackKind::Audio) {
+            const Clip* video = timeline_.findClip(c->linkedClipId, &pista);
+            if (video) c = video;
+        }
+        if (!incluido(c->id)) destinos.push_back({c->id, pista->id, c->timelineStart});
+    }
+    if (destinos.empty()) return OpResult::fallo("No hay clips que mover.");
+
+    // El grupo no puede empezar antes de 0: el desplazamiento se limita para el primero.
+    TimeUs inicioMinimo = destinos[0].start;
+    for (const Destino& d : destinos) inicioMinimo = std::min(inicioMinimo, d.start);
+    delta = std::max(delta, -inicioMinimo);
+    for (Destino& d : destinos) d.start += delta;
+    return aplicarMovimientos(std::move(destinos), sobrescribir);
+}
+
+namespace {
+
+Clip* buscarClip(Timeline& tl, Id id, Track** pista = nullptr) {
+    for (Track& t : tl.tracks) {
+        for (Clip& c : t.clips) {
+            if (c.id == id) {
+                if (pista) *pista = &t;
+                return &c;
+            }
+        }
+    }
+    return nullptr;
+}
+
+Track* buscarPista(Timeline& tl, Id id) {
+    for (Track& t : tl.tracks)
+        if (t.id == id) return &t;
+    return nullptr;
+}
+
+void quitarClip(Track& t, Id id) {
+    std::erase_if(t.clips, [id](const Clip& c) { return c.id == id; });
+    std::erase_if(t.transitions, [id](const Transition& tr) { return tr.fromClipId == id || tr.toClipId == id; });
+}
+
+} // namespace
+
+void Project::cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin) {
+    const Clip* c = buscarClip(tl, clipId);
+    if (!c) return;
+    const Id vinculado = c->linkedClipId;
+    // Si se corta el medio, quedan dos partes: las derechas (del clip y de su vinculado)
+    // son clips nuevos, vinculados entre sí.
+    const bool medio = ini > c->timelineStart && fin < c->timelineEnd();
+    const Id derecho = medio ? newId() : kSinId;
+    const Id derechoVinculado = (medio && vinculado != kSinId) ? newId() : kSinId;
+
+    auto cortar = [&](Id id, Id idDerecho, Id vinculoDerecho) {
+        Track* t = nullptr;
+        Clip* x = buscarClip(tl, id, &t);
+        if (!x) return;
+        const TimeUs xi = x->timelineStart, xf = x->timelineEnd();
+        if (fin <= xi || ini >= xf) return;  // no se tocan
+        if (ini <= xi && fin >= xf) {        // tapado por completo
+            quitarClip(*t, id);
+        } else if (ini <= xi) {              // tapado el inicio
+            x->sourceIn += fin - xi;
+            x->timelineStart = fin;
+        } else if (fin >= xf) {              // tapado el final
+            x->sourceOut -= xf - ini;
+        } else {                             // tapado el medio: se divide
+            Clip der = *x;
+            der.id = idDerecho;
+            der.linkedClipId = vinculoDerecho;
+            der.sourceIn = x->sourceIn + (fin - xi);
+            der.timelineStart = fin;
+            x->sourceOut = x->sourceIn + (ini - xi);
+            t->clips.push_back(der);  // (invalida `x`)
+            sortClips(*t);
+        }
+    };
+    cortar(clipId, derecho, derechoVinculado);
+    if (vinculado != kSinId) cortar(vinculado, derechoVinculado, derecho);
+}
+
+OpResult Project::aplicarMovimientos(std::vector<Destino> destinos, bool sobrescribir) {
+    // Los audios vinculados acompañan a su video, a la pista de audio de su pista destino.
+    const size_t n = destinos.size();
+    for (size_t i = 0; i < n; ++i) {
+        const Clip* c = timeline_.findClip(destinos[i].clipId);
+        if (!c || !c->vinculado()) continue;
+        const Track* pistaAudio = timeline_.audioTrackOf(destinos[i].trackId);
+        if (!pistaAudio) return OpResult::fallo("La pista destino no tiene pista de audio.");
+        destinos.push_back({c->linkedClipId, pistaAudio->id, destinos[i].start});
     }
 
-    // Validado: se aplican los dos movimientos.
-    const Id audioId = audio ? audio->id : kSinId;
-    const Id pistaAudioId = pistaAudioDestino ? pistaAudioDestino->id : kSinId;
-    trasladar(clipId, destTrackId, newStart);
-    if (audioId != kSinId) trasladar(audioId, pistaAudioId, newStart);
+    // Se trabaja sobre una copia del timeline y solo se acepta si queda válida.
+    Timeline nuevo = timeline_;
+    struct Colocacion {
+        Clip clip;
+        Id trackId;
+    };
+    std::vector<Colocacion> colocar;
+    for (const Destino& d : destinos) {
+        Track* origen = nullptr;
+        Clip* c = buscarClip(nuevo, d.clipId, &origen);
+        if (!c) return OpResult::fallo("El clip no existe.");
+        Clip copia = *c;
+        copia.timelineStart = d.start;
+        colocar.push_back({copia, d.trackId});
+        std::erase_if(origen->clips, [&d](const Clip& x) { return x.id == d.clipId; });
+    }
+
+    // Sobrescribir: en cada pista destino se libera el tramo que ocupará cada clip movido.
+    if (sobrescribir) {
+        for (const Colocacion& col : colocar) {
+            Track* t = buscarPista(nuevo, col.trackId);
+            if (!t) continue;
+            std::vector<Id> debajo;
+            for (const Clip& x : t->clips)
+                if (x.timelineStart < col.clip.timelineEnd() && col.clip.timelineStart < x.timelineEnd())
+                    debajo.push_back(x.id);
+            for (Id id : debajo) cortarRango(nuevo, id, col.clip.timelineStart, col.clip.timelineEnd());
+        }
+        // Los restos de menos de un cuadro se descartan (con su vinculado).
+        const TimeUs cuadro = frameDuration();
+        for (Track& t : nuevo.tracks)
+            std::erase_if(t.clips, [cuadro](const Clip& x) { return x.duration() < cuadro; });
+        for (Track& t : nuevo.tracks)
+            for (Clip& x : t.clips)
+                if (x.vinculado() && !buscarClip(nuevo, x.linkedClipId)) x.linkedClipId = kSinId;
+    }
+
+    for (const Colocacion& col : colocar) {
+        Track* t = buscarPista(nuevo, col.trackId);
+        if (!t) return OpResult::fallo("La pista destino no existe.");
+        t->clips.push_back(col.clip);
+    }
+    for (Track& t : nuevo.tracks) {
+        sortClips(t);
+        if (!sinSolapes(t))
+            return OpResult::fallo("El movimiento haría que un clip se solape con otro en la pista " + t.name +
+                                   ". (Con Shift se sobrescriben los clips de debajo.)");
+    }
+
+    // Se copia pista por pista (mismo orden) para no invalidar punteros a las pistas.
+    for (size_t i = 0; i < timeline_.tracks.size(); ++i) {
+        timeline_.tracks[i].clips = std::move(nuevo.tracks[i].clips);
+        timeline_.tracks[i].transitions = std::move(nuevo.tracks[i].transitions);
+    }
     touch();
     return OpResult::exito();
 }

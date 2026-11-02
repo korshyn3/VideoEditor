@@ -238,8 +238,11 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
     if (!m_ctrl) return;
 
     const controller::Seleccion& sel = m_ctrl->seleccion();
-    const model::Clip* clipSel = m_ctrl->project().timeline().findClip(sel.clipId);
-    const model::Id vinculadoSel = clipSel ? clipSel->linkedClipId : model::kSinId;
+    // Clips vinculados a los seleccionados (se resaltan con borde simple).
+    std::vector<model::Id> vinculadosSel;
+    for (model::Id id : sel.clips)
+        if (const model::Clip* x = m_ctrl->project().timeline().findClip(id); x && x->vinculado())
+            vinculadosSel.push_back(x->linkedClipId);
     const auto filas = PistasVisuales();
     m_escala.setOrigenX(kAnchoCabecera);
 
@@ -258,9 +261,10 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         for (const model::Clip& c : pista->clips) {
             CRect rcClip = RectClip(i, c);
             if (rcClip.right < kAnchoCabecera || rcClip.left > rc.right) continue;
-            const Resaltado r = (c.id == sel.clipId) ? Resaltado::Seleccionado
-                                : (vinculadoSel != model::kSinId && c.id == vinculadoSel) ? Resaltado::Vinculado
-                                                                                          : Resaltado::Nada;
+            const bool esVinculado = std::find(vinculadosSel.begin(), vinculadosSel.end(), c.id) != vinculadosSel.end();
+            const Resaltado r = sel.contiene(c.id) ? Resaltado::Seleccionado
+                                : esVinculado      ? Resaltado::Vinculado
+                                                   : Resaltado::Nada;
             DibujarClip(dc, rcClip, c, video, r, pista->muted);
         }
         dc.RestoreDC(-1);
@@ -287,10 +291,45 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         }
     }
 
+    // Fantasma (rectángulo punteado) de un clip en la posición propuesta.
+    auto fantasma = [&](model::Id pistaId, model::TimeUs inicio, model::TimeUs fin) {
+        for (int i = 0; i < static_cast<int>(filas.size()); ++i) {
+            if (filas[i]->id != pistaId) continue;
+            const CRect f = RectFila(i);
+            CRect g(m_escala.tiempoAX(inicio), f.top + 3, m_escala.tiempoAX(fin), f.bottom - 3);
+            CPen pen(PS_DOT, 1, RGB(255, 255, 255));
+            CPen* penAnterior = dc.SelectObject(&pen);
+            CBrush* brochaAnterior = static_cast<CBrush*>(dc.SelectStockObject(NULL_BRUSH));
+            dc.Rectangle(g);
+            dc.SelectObject(brochaAnterior);
+            dc.SelectObject(penAnterior);
+        }
+    };
+
+    // Arrastre de un grupo: todos los seleccionados (y sus vinculados) se corren igual,
+    // cada uno en su pista. El grupo no puede empezar antes de 0.
+    if (m_arrastreGrupo && m_seMovio && m_arrastre == Arrastre::Clip) {
+        const model::Timeline& tl = m_ctrl->project().timeline();
+        model::TimeUs delta = m_inicioFantasma - m_inicioOriginal;
+        model::TimeUs inicioMinimo = INT64_MAX;
+        for (model::Id id : sel.clips)
+            if (const model::Clip* x = tl.findClip(id)) inicioMinimo = std::min(inicioMinimo, x->timelineStart);
+        if (inicioMinimo != INT64_MAX) delta = std::max(delta, -inicioMinimo);
+        for (model::Id id : sel.clips) {
+            const model::Track* tx = nullptr;
+            const model::Clip* x = tl.findClip(id, &tx);
+            if (!x) continue;
+            fantasma(tx->id, x->timelineStart + delta, x->timelineEnd() + delta);
+            const model::Track* tv = nullptr;
+            if (x->vinculado() && tl.findClip(x->linkedClipId, &tv))
+                fantasma(tv->id, x->timelineStart + delta, x->timelineEnd() + delta);
+        }
+    }
+
     // Fantasma del clip que se está arrastrando (movimiento o trim).
     const model::Track* pistaClip = nullptr;
     const model::Clip* c = m_seMovio ? m_ctrl->project().timeline().findClip(m_clipArrastrado, &pistaClip) : nullptr;
-    if (c && m_arrastre != Arrastre::Nada && m_arrastre != Arrastre::Cursor) {
+    if (c && !m_arrastreGrupo && m_arrastre != Arrastre::Nada && m_arrastre != Arrastre::Cursor) {
         model::TimeUs inicio = m_inicioFantasma;
         model::TimeUs fin = m_inicioFantasma + c->duration();
         model::Id pistaFantasma = m_pistaFantasma;
@@ -312,18 +351,8 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
                 pistaFantasmaVinculado = pistaVinculado->id;
             }
         }
-        for (int i = 0; i < static_cast<int>(filas.size()); ++i) {
-            if (filas[i]->id != pistaFantasma && filas[i]->id != pistaFantasmaVinculado) continue;
-            const CRect f = RectFila(i);
-            CRect g(m_escala.tiempoAX(inicio), f.top + 3, m_escala.tiempoAX(fin), f.bottom - 3);
-            CPen pen(PS_DOT, 1, RGB(255, 255, 255));
-            CPen* penAnterior = dc.SelectObject(&pen);
-            CBrush* brochaAnterior = static_cast<CBrush*>(dc.SelectStockObject(NULL_BRUSH));
-            dc.SetBkMode(TRANSPARENT);
-            dc.Rectangle(g);
-            dc.SelectObject(brochaAnterior);
-            dc.SelectObject(penAnterior);
-        }
+        fantasma(pistaFantasma, inicio, fin);
+        if (pistaFantasmaVinculado != model::kSinId) fantasma(pistaFantasmaVinculado, inicio, fin);
     }
 
     DibujarRegla(dc, rc);
@@ -470,7 +499,7 @@ void CTimelineWnd::NotificarCambio(bool cambioModelo) {
     if (CWnd* padre = GetParent()) padre->SendMessage(WM_APP_VISTA_CAMBIO, cambioModelo ? 1 : 0);
 }
 
-void CTimelineWnd::OnLButtonDown(UINT /*nFlags*/, CPoint point) {
+void CTimelineWnd::OnLButtonDown(UINT nFlags, CPoint point) {
     SetFocus();  // para recibir la rueda del mouse
     if (!m_ctrl) return;
     m_puntoInicio = point;
@@ -514,9 +543,18 @@ void CTimelineWnd::OnLButtonDown(UINT /*nFlags*/, CPoint point) {
         return;
     }
 
-    // 4) Clip: lo selecciona y prepara un posible arrastre.
+    // 4) Clip: Ctrl+clic lo agrega a la selección o lo quita. Un clic normal lo
+    //    selecciona solo, salvo que ya forme parte de una selección múltiple: entonces se
+    //    prepara el arrastre del grupo (y si no se arrastra, al soltar queda él solo).
     if (const model::Clip* clip = ClipEn(point, nullptr)) {
-        m_ctrl->seleccionarClip(clip->id);
+        if (nFlags & MK_CONTROL) {
+            m_ctrl->alternarSeleccionClip(clip->id);
+            NotificarCambio(false);
+            return;
+        }
+        const controller::Seleccion& sel = m_ctrl->seleccion();
+        m_arrastreGrupo = sel.multiple() && sel.contiene(clip->id);
+        if (!m_arrastreGrupo) m_ctrl->seleccionarClip(clip->id);
         m_arrastre = Arrastre::Clip;
         m_clipArrastrado = clip->id;
         m_inicioOriginal = clip->timelineStart;
@@ -556,6 +594,12 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
 
     m_inicioFantasma = std::max<model::TimeUs>(0, m_inicioOriginal + m_escala.pxADuracion(point.x - m_puntoInicio.x));
 
+    // Un grupo no cambia de pista.
+    if (m_arrastreGrupo) {
+        Invalidate(FALSE);
+        return;
+    }
+
     // La pista destino cambia solo si la fila bajo el mouse es del mismo tipo.
     const model::Track* origen = nullptr;
     m_ctrl->project().timeline().findClip(m_clipArrastrado, &origen);
@@ -570,15 +614,24 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
     Invalidate(FALSE);
 }
 
-void CTimelineWnd::OnLButtonUp(UINT /*nFlags*/, CPoint /*point*/) {
+void CTimelineWnd::OnLButtonUp(UINT nFlags, CPoint /*point*/) {
     const Arrastre arrastre = m_arrastre;
+    const bool grupo = m_arrastreGrupo;
     m_arrastre = Arrastre::Nada;
+    m_arrastreGrupo = false;
     if (GetCapture() == this) ReleaseCapture();
+    const bool sobrescribir = (nFlags & MK_SHIFT) != 0;
 
-    if (arrastre == Arrastre::Clip && m_seMovio && m_ctrl) {
-        // View -> Controller. Si el destino se solapa, el modelo lo rechaza y el clip
-        // conserva su posición original (spec timeline-editing).
-        const model::OpResult r = m_ctrl->moveClip(m_clipArrastrado, m_pistaFantasma, m_inicioFantasma);
+    if (arrastre == Arrastre::Clip && grupo && !m_seMovio && m_ctrl) {
+        // Clic sin arrastre sobre un clip de la selección múltiple: queda él solo.
+        m_ctrl->seleccionarClip(m_clipArrastrado);
+        NotificarCambio(false);
+    } else if (arrastre == Arrastre::Clip && m_seMovio && m_ctrl) {
+        // View -> Controller. Si el destino se solapa (y no se pidió sobrescribir con
+        // Shift), el modelo lo rechaza y los clips conservan su posición.
+        const model::OpResult r =
+            grupo ? m_ctrl->moverSeleccion(m_inicioFantasma - m_inicioOriginal, sobrescribir)
+                  : m_ctrl->moveClip(m_clipArrastrado, m_pistaFantasma, m_inicioFantasma, sobrescribir);
         if (!r.ok) MessageBeep(MB_ICONWARNING);
         NotificarCambio(r.ok);
     } else if ((arrastre == Arrastre::BordeInicio || arrastre == Arrastre::BordeFin) && m_seMovio && m_ctrl) {
@@ -595,6 +648,7 @@ void CTimelineWnd::OnCaptureChanged(CWnd* pWnd) {
     // Si otra ventana roba la captura (p. ej. Alt+Tab), se cancela el arrastre.
     if (pWnd != this && m_arrastre != Arrastre::Nada) {
         m_arrastre = Arrastre::Nada;
+        m_arrastreGrupo = false;
         m_seMovio = false;
         Invalidate(FALSE);
     }
@@ -622,7 +676,8 @@ void CTimelineWnd::OnRButtonDown(UINT /*nFlags*/, CPoint point) {
     if (!m_ctrl || m_arrastre != Arrastre::Nada) return;
     const model::Clip* clip = ClipEn(point, nullptr);
     if (!clip) return;
-    m_ctrl->seleccionarClip(clip->id);
+    // Sobre un clip de la selección múltiple, el menú actúa sobre toda la selección.
+    if (!m_ctrl->seleccion().contiene(clip->id)) m_ctrl->seleccionarClip(clip->id);
     NotificarCambio(false);
 
     // Menú contextual del .rc. Su dueño es la ventana padre: los comandos (Dividir,

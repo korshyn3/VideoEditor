@@ -14,6 +14,7 @@
 #include "EditorEngine/PlaybackEngine.h"
 #include "EditorModel/Project.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -24,7 +25,11 @@ namespace controller {
 
 struct Seleccion {
     model::Id trackId = model::kSinId;  // pista seleccionada (destino de importación)
-    model::Id clipId = model::kSinId;   // clip seleccionado (o ninguno)
+    model::Id clipId = model::kSinId;   // clip principal: el último seleccionado (o ninguno)
+    std::vector<model::Id> clips;       // todos los clips seleccionados (incluye el principal)
+
+    bool contiene(model::Id id) const { return std::find(clips.begin(), clips.end(), id) != clips.end(); }
+    bool multiple() const { return clips.size() > 1; }
 };
 
 // Resultado de importar varios archivos: los válidos se importan aunque otros fallen.
@@ -57,23 +62,34 @@ public:
 
     model::OpResult addTrack(model::TrackKind kind);
     model::OpResult removeTrack(model::Id trackId);
-    model::OpResult moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart);
+    // Mueve un clip (y su vinculado); con `sobrescribir` recorta los clips de debajo.
+    // Después queda seleccionado solo ese clip.
+    model::OpResult moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart,
+                             bool sobrescribir = false);
+    // Mueve todos los clips seleccionados `delta`, cada uno en su pista.
+    model::OpResult moverSeleccion(model::TimeUs delta, bool sobrescribir = false);
 
-    // Divide el clip seleccionado en la posición del cursor. La selección queda en la
-    // parte izquierda.
+    // Las acciones sobre la selección son "todo o nada": si alguna falla, el proyecto
+    // vuelve a como estaba antes de la acción.
+    // Divide en la posición del cursor todos los clips seleccionados que estén bajo el
+    // cursor. La selección queda en las partes izquierdas.
     model::OpResult splitAtPlayhead();
     // Recorta un clip: nuevo tramo [newIn, newOut) de la fuente (ver Project::trimClip).
+    // Solo con un clip seleccionado.
     model::OpResult trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut);
-    // Elimina el clip seleccionado, dejando un hueco o cerrándolo (ripple).
+    // Elimina todos los clips seleccionados, dejando huecos o cerrándolos (ripple).
     model::OpResult deleteSelectedClip(bool ripple);
-    // Desvincula el clip seleccionado de su clip vinculado (video <-> audio).
+    // Desvincula el clip seleccionado de su clip vinculado (video <-> audio). Solo con
+    // un clip seleccionado.
     model::OpResult unlinkAudio();
     model::OpResult setTrackMuted(model::Id trackId, bool muted);
 
     // ---- Selección y cursor -------------------------------------------------
     void seleccionarPista(model::Id trackId);
-    // Selecciona el clip y también su pista.
+    // Selecciona solo ese clip (y su pista).
     void seleccionarClip(model::Id clipId);
+    // Ctrl+clic: agrega el clip a la selección o lo quita.
+    void alternarSeleccionClip(model::Id clipId);
     void limpiarSeleccionClip();
     // Mueve el cursor (y el preview, si está iniciado) a t, limitado a [0, duración].
     void setPlayhead(model::TimeUs t);

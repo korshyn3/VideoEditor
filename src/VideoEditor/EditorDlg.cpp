@@ -333,9 +333,16 @@ void CEditorDlg::ActualizarPropiedades() {
     CString t;
     const model::Track* pista = nullptr;
     const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista);
-    GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(clip != nullptr);
-    // "Desvincular audio" solo tiene sentido en un clip (de video o de audio) vinculado.
-    GetDlgItem(IDC_BTN_DESVINCULAR_AUDIO)->EnableWindow(clip != nullptr && clip->vinculado());
+    // Dividir se aplica a toda la selección; desvincular y recortar, solo a un clip.
+    GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(!sel.clips.empty());
+    GetDlgItem(IDC_BTN_DESVINCULAR_AUDIO)->EnableWindow(clip != nullptr && clip->vinculado() && !sel.multiple());
+    if (sel.multiple()) {
+        CString linea;
+        linea.Format(L"%d CLIPS SELECCIONADOS\r\nDividir, eliminar y mover se aplican a todos.\r\n"
+                     L"Recortar y desvincular, solo con un clip.\r\n\r\nÚLTIMO SELECCIONADO\r\n",
+                     static_cast<int>(sel.clips.size()));
+        t += linea;
+    }
     if (clip) {
         t += L"CLIP (pista " + CStringDesdeUtf8(pista->name) + L")\r\n";
         t += L"Posición: " + TextoTiempo(clip->timelineStart) + L" → " + TextoTiempo(clip->timelineEnd()) + L"\r\n";
@@ -367,6 +374,7 @@ void CEditorDlg::ActualizarPropiedades() {
     // Con un clip seleccionado se muestra el panel de clip (con entrada/salida editables).
     if (clip) {
         m_panelClip.MostrarClip(*clip, t);
+        m_panelClip.HabilitarRecorte(!sel.multiple());
         m_panelMedio.ShowWindow(SW_HIDE);
         m_panelClip.ShowWindow(SW_SHOW);
     } else {

@@ -48,6 +48,10 @@ void CPanelClipDlg::MostrarClip(const model::Clip& clip, const CString& info) {
     if (actual != info) SetDlgItemText(IDC_CLIP_INFO, info);
 }
 
+void CPanelClipDlg::HabilitarRecorte(bool habilitar) {
+    for (int id : {IDC_CLIP_IN, IDC_CLIP_OUT, IDC_CLIP_APLICAR}) GetDlgItem(id)->EnableWindow(habilitar);
+}
+
 void CPanelClipDlg::OnAplicar() {
     if (!m_ctrl || m_clipId == model::kSinId) return;
     model::TimeUs in = 0, out = 0;
