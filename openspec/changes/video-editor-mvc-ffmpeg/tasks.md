@@ -54,8 +54,8 @@
 
 ## 6. Fase 6 — Efectos
 
-- [ ] 6.1 Implementar en el modelo agregar/editar/reordenar/quitar efectos con rangos y límites (brillo −1..1, contraste 0..3, blur 0..50, fades que no superan la duración) y la copia de efectos en split (fade in solo en la 1.ª mitad, fade out solo en la 2.ª); verificar con tests "Valor fuera de rango", "Fade más largo que el clip" y "Split con efectos"
-- [ ] 6.2 Traducir efectos a filtros en `FilterGraphBuilder` (`hue=s=0`, `lutyuv` para brillo/contraste, `gblur`, `fade` en tiempo absoluto); verificar con tests de cadena y con un test de integración que un cuadro con escala de grises tiene U=V≈128
+- [x] 6.1 Implementar en el modelo agregar/editar/reordenar/quitar efectos con rangos y límites (brillo −1..1, contraste 0..3, blur 0..50, fades que no superan la duración) y la copia de efectos en split (fade in solo en la 1.ª mitad, fade out solo en la 2.ª); verificar con tests "Valor fuera de rango", "Fade más largo que el clip" y "Split con efectos"
+- [x] 6.2 Traducir efectos a filtros en `FilterGraphBuilder` (`hue=s=0`, `lutyuv` para brillo/contraste, `gblur`, `fade` en tiempo absoluto); verificar con tests de cadena y con un test de integración que un cuadro con escala de grises tiene U=V≈128
 - [ ] 6.3 Diseñar en `IDD_PROP_CLIP` la sección de efectos (`CListBox`, `CComboBox` para agregar, botones subir/bajar/quitar, `CSliderCtrl` + `CEdit` por parámetro) con actualización en vivo del preview; verificar a mano "Agregar un efecto", "Quitar un efecto", "Aumentar brillo", "Desenfocar" y "Fade in de 1 segundo"
 
 ## 7. Fase 7 — Transiciones entre clips

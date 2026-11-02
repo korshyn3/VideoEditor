@@ -19,6 +19,13 @@ std::string seg(TimeUs t) {
     return buf;
 }
 
+// Número con 4 decimales (siempre con punto decimal).
+std::string num(double x) {
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "%.4f", x);
+    return buf;
+}
+
 std::string racional(model::Rational r) {
     return std::to_string(r.num) + "/" + std::to_string(r.den);
 }
@@ -65,14 +72,43 @@ std::vector<Segmento> segmentar(const model::Track& pista, TimeUs t0, TimeUs fin
     return segs;
 }
 
-// Cadena de un segmento de video de un clip: normaliza a la resolución/fps del proyecto
-// y garantiza exactamente `n` cuadros.
-std::string cadenaVideoClip(const RenderSettings& s, long long n) {
+// Filtros de los efectos del clip, en orden (cada uno termina en ','). Se aplican con
+// pts relativos al INICIO DEL CLIP (no del segmento), así un fade empieza en el clip
+// aunque el segmento arranque a la mitad.
+std::string cadenaEfectos(const model::Clip& c) {
+    std::string f;
+    for (const model::Effect& e : c.effects) {
+        if (std::holds_alternative<model::Grayscale>(e)) {
+            f += "hue=s=0,";
+        } else if (const auto* bc = std::get_if<model::BrightnessContrast>(&e)) {
+            // y' = (y - 128)·C + 128 + B·255, escrito como y·C + K (eq no está en esta build).
+            const double k = 128.0 + bc->brightness * 255.0 - 128.0 * bc->contrast;
+            f += "lutyuv=y='clip(val*" + num(bc->contrast) + "+" + num(k) + ",0,255)',";
+        } else if (const auto* b = std::get_if<model::Blur>(&e)) {
+            if (b->radius > 0) f += "gblur=sigma=" + num(b->radius) + ",";  // boxblur no está
+        } else if (const auto* fd = std::get_if<model::Fade>(&e)) {
+            if (fd->fadeIn > 0) f += "fade=t=in:st=0:d=" + seg(fd->fadeIn) + ",";
+            if (fd->fadeOut > 0)
+                f += "fade=t=out:st=" + seg(c.duration() - fd->fadeOut) + ":d=" + seg(fd->fadeOut) + ",";
+        }
+    }
+    return f;
+}
+
+// Cadena de un segmento de video de un clip: normaliza a la resolución/fps del proyecto,
+// aplica los efectos y garantiza exactamente `n` cuadros. `desdeInicioClip` es cuánto
+// del clip quedó antes del segmento (arranque a la mitad del clip).
+std::string cadenaVideoClip(const RenderSettings& s, long long n, const model::Clip& clip, TimeUs desdeInicioClip) {
     const std::string W = std::to_string(s.width), H = std::to_string(s.height);
-    return "setpts=PTS-STARTPTS,"
+    const std::string efectos = cadenaEfectos(clip);
+    // Con efectos, los pts arrancan en el tiempo del clip; el setpts del final los vuelve a 0.
+    const std::string inicio = (!efectos.empty() && desdeInicioClip > 0)
+                                   ? "setpts=PTS-STARTPTS+" + seg(desdeInicioClip) + "/TB,"
+                                   : "setpts=PTS-STARTPTS,";
+    return inicio +
            "scale=" + W + ":" + H + ":force_original_aspect_ratio=decrease:force_divisible_by=2,"
            "pad=" + W + ":" + H + ":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,"
-           "fps=" + racional(s.fps) + ",format=yuv420p,"
+           "fps=" + racional(s.fps) + ",format=yuv420p," + efectos +
            "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + std::to_string(n) + ",setpts=PTS-STARTPTS";
 }
 
@@ -148,8 +184,10 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         if (n <= 0) continue;
         const std::string etiqueta = "v1s" + std::to_string(i);
         if (s.clip) {
-            const GraphInput in = nuevaEntrada(*s.clip, true, tiempoDeCuadro(s.cuadroIni, fps), tiempoDeCuadro(s.cuadroFin, fps));
-            g += "[" + in.label + "]" + cadenaVideoClip(salida, n) + "[" + etiqueta + "];\n";
+            const TimeUs iniSeg = tiempoDeCuadro(s.cuadroIni, fps);
+            const GraphInput in = nuevaEntrada(*s.clip, true, iniSeg, tiempoDeCuadro(s.cuadroFin, fps));
+            const TimeUs desdeInicioClip = std::max<TimeUs>(0, iniSeg - s.clip->timelineStart);
+            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, *s.clip, desdeInicioClip) + "[" + etiqueta + "];\n";
         } else {
             g += cadenaHuecoVideo(salida, n) + "[" + etiqueta + "];\n";
         }

@@ -142,6 +142,27 @@ model::OpResult EditorController::setTrackMuted(model::Id trackId, bool muted) {
     return project_.setTrackMuted(trackId, muted);
 }
 
+model::OpResult EditorController::addEffect(model::Id clipId, int tipo) {
+    model::Effect efecto = model::efectoPorDefecto(tipo);
+    // Un fade nuevo dura 1 s, o lo que permita un clip más corto.
+    if (auto* f = std::get_if<model::Fade>(&efecto)) {
+        if (const model::Clip* c = project_.timeline().findClip(clipId)) f->fadeIn = std::min(f->fadeIn, c->duration());
+    }
+    return project_.addEffect(clipId, efecto);
+}
+
+model::OpResult EditorController::setEffect(model::Id clipId, size_t indice, const model::Effect& efecto) {
+    return project_.setEffect(clipId, indice, efecto);
+}
+
+model::OpResult EditorController::moveEffect(model::Id clipId, size_t indice, int delta) {
+    return project_.moveEffect(clipId, indice, delta);
+}
+
+model::OpResult EditorController::removeEffect(model::Id clipId, size_t indice) {
+    return project_.removeEffect(clipId, indice);
+}
+
 void EditorController::seleccionarPista(model::Id trackId) {
     if (project_.timeline().findTrack(trackId)) {
         seleccion_.trackId = trackId;

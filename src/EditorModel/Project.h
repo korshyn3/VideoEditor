@@ -100,6 +100,17 @@ public:
     // de los dos). Los clips quedan donde están. Se rechaza si no hay vínculo.
     OpResult unlinkAudio(Id clipId);
 
+    // ---- Efectos (solo clips de pistas de video) ------------------------------
+    // Los parámetros fuera de rango se limitan (ver Effect.h). Un fade cuyo fade in más
+    // fade out supere la duración del clip se rechaza.
+    // Agrega el efecto al final de la lista del clip.
+    OpResult addEffect(Id clipId, Effect efecto);
+    // Reemplaza los parámetros del efecto `indice` (debe ser del mismo tipo).
+    OpResult setEffect(Id clipId, size_t indice, Effect efecto);
+    // Mueve el efecto `indice` una posición antes (delta = -1) o después (delta = +1).
+    OpResult moveEffect(Id clipId, size_t indice, int delta);
+    OpResult removeEffect(Id clipId, size_t indice);
+
     // Duración de un cuadro del lienzo (mínimo de un clip después de un trim).
     TimeUs frameDuration() const;
 
@@ -134,6 +145,8 @@ private:
     OpResult aplicarMovimientos(std::vector<Destino> destinos, bool sobrescribir);
     // Quita del clip (y de su vinculado) el tramo [ini, fin) del timeline `tl`.
     void cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin);
+    // Clip de una pista de video al que se le pueden editar los efectos.
+    OpResult clipConEfectos(Id clipId, Clip** clip);
     static void sortClips(Track& track);
     Id newId() { return nextId_++; }
     void touch();

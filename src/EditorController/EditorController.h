@@ -84,6 +84,13 @@ public:
     model::OpResult unlinkAudio();
     model::OpResult setTrackMuted(model::Id trackId, bool muted);
 
+    // Efectos de un clip de video (ver Project::addEffect). `indice` es la posición en la
+    // lista de efectos del clip.
+    model::OpResult addEffect(model::Id clipId, int tipo);
+    model::OpResult setEffect(model::Id clipId, size_t indice, const model::Effect& efecto);
+    model::OpResult moveEffect(model::Id clipId, size_t indice, int delta);
+    model::OpResult removeEffect(model::Id clipId, size_t indice);
+
     // ---- Selección y cursor -------------------------------------------------
     void seleccionarPista(model::Id trackId);
     // Selecciona solo ese clip (y su pista).

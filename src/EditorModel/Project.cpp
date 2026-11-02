@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 
 namespace model {
 
@@ -19,6 +20,52 @@ bool sinSolapes(const Track& t) {
     for (size_t i = 1; i < t.clips.size(); ++i)
         if (t.clips[i].timelineStart < t.clips[i - 1].timelineEnd()) return false;
     return true;
+}
+
+// Ajusta los fades del clip a su duración (después de dividirlo o recortarlo): el fade
+// in no pasa de la duración y el fade out no pasa de lo que deja el fade in. Los fades
+// que quedan en 0 se quitan.
+void ajustarFades(Clip& c) {
+    const TimeUs dur = c.duration();
+    for (Effect& e : c.effects) {
+        if (Fade* f = std::get_if<Fade>(&e)) {
+            f->fadeIn = std::min(f->fadeIn, dur);
+            f->fadeOut = std::min(f->fadeOut, dur - f->fadeIn);
+        }
+    }
+    std::erase_if(c.effects, [](const Effect& e) {
+        const Fade* f = std::get_if<Fade>(&e);
+        return f && f->fadeIn == 0 && f->fadeOut == 0;
+    });
+}
+
+// Al dividir un clip, el fade in queda solo en la parte izquierda y el fade out solo en
+// la derecha.
+void repartirFades(Clip& izquierda, Clip& derecha) {
+    for (Effect& e : izquierda.effects)
+        if (Fade* f = std::get_if<Fade>(&e)) f->fadeOut = 0;
+    for (Effect& e : derecha.effects)
+        if (Fade* f = std::get_if<Fade>(&e)) f->fadeIn = 0;
+    ajustarFades(izquierda);
+    ajustarFades(derecha);
+}
+
+// Segundos con dos decimales, para los mensajes.
+std::string segundosTexto(TimeUs t) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.2f", tiempoASegundos(t));
+    return buf;
+}
+
+// Valida un efecto ya limitado contra el clip al que se aplica.
+OpResult validarEfecto(const Clip& c, const Effect& e) {
+    if (const Fade* f = std::get_if<Fade>(&e)) {
+        if (f->fadeIn + f->fadeOut > c.duration())
+            return OpResult::fallo("El fade in (" + segundosTexto(f->fadeIn) + " s) más el fade out (" +
+                                   segundosTexto(f->fadeOut) + " s) no pueden superar la duración del clip (" +
+                                   segundosTexto(c.duration()) + " s).");
+    }
+    return OpResult::exito();
 }
 
 } // namespace
@@ -325,8 +372,10 @@ void Project::cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin) {
         } else if (ini <= xi) {              // tapado el inicio
             x->sourceIn += fin - xi;
             x->timelineStart = fin;
+            ajustarFades(*x);
         } else if (fin >= xf) {              // tapado el final
             x->sourceOut -= xf - ini;
+            ajustarFades(*x);
         } else {                             // tapado el medio: se divide
             Clip der = *x;
             der.id = idDerecho;
@@ -334,6 +383,7 @@ void Project::cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin) {
             der.sourceIn = x->sourceIn + (fin - xi);
             der.timelineStart = fin;
             x->sourceOut = x->sourceIn + (ini - xi);
+            repartirFades(*x, der);
             t->clips.push_back(der);  // (invalida `x`)
             sortClips(*t);
         }
@@ -436,6 +486,7 @@ OpResult Project::split(Id clipId, TimeUs t, Id* clipDerecho) {
         der.timelineStart = t;
         der.linkedClipId = vinculoDerecho;
         c->sourceOut = corteFuente;
+        repartirFades(*c, der);
         // Una transición que salía del clip original ahora sale de su parte derecha.
         for (Transition& tr : track->transitions)
             if (tr.fromClipId == id) tr.fromClipId = idDerecho;
@@ -481,6 +532,7 @@ OpResult Project::trimClip(Id clipId, TimeUs newIn, TimeUs newOut) {
         c->sourceIn = newIn;
         c->sourceOut = newOut;
         c->timelineStart = newStart;
+        ajustarFades(*c);
     }
     touch();
     return OpResult::exito();
@@ -549,6 +601,56 @@ OpResult Project::unlinkAudio(Id clipId) {
     if (!clip->vinculado()) return OpResult::fallo("El clip no tiene audio vinculado.");
     if (Clip* otro = findClipMut(clip->linkedClipId)) otro->linkedClipId = kSinId;
     clip->linkedClipId = kSinId;
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::clipConEfectos(Id clipId, Clip** clip) {
+    Track* pista = nullptr;
+    *clip = findClipMut(clipId, &pista);
+    if (!*clip) return OpResult::fallo("El clip no existe.");
+    if (pista->kind != TrackKind::Video) return OpResult::fallo("Los efectos solo se aplican a clips de video.");
+    return OpResult::exito();
+}
+
+OpResult Project::addEffect(Id clipId, Effect efecto) {
+    Clip* clip = nullptr;
+    if (OpResult r = clipConEfectos(clipId, &clip); !r) return r;
+    efecto = limitarEfecto(efecto);
+    if (OpResult r = validarEfecto(*clip, efecto); !r) return r;
+    clip->effects.push_back(efecto);
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::setEffect(Id clipId, size_t indice, Effect efecto) {
+    Clip* clip = nullptr;
+    if (OpResult r = clipConEfectos(clipId, &clip); !r) return r;
+    if (indice >= clip->effects.size()) return OpResult::fallo("El efecto no existe.");
+    if (clip->effects[indice].index() != efecto.index()) return OpResult::fallo("El efecto es de otro tipo.");
+    efecto = limitarEfecto(efecto);
+    if (OpResult r = validarEfecto(*clip, efecto); !r) return r;
+    clip->effects[indice] = efecto;
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::moveEffect(Id clipId, size_t indice, int delta) {
+    Clip* clip = nullptr;
+    if (OpResult r = clipConEfectos(clipId, &clip); !r) return r;
+    const long long destino = static_cast<long long>(indice) + delta;
+    if (indice >= clip->effects.size() || destino < 0 || destino >= static_cast<long long>(clip->effects.size()))
+        return OpResult::fallo("El efecto no se puede mover más.");
+    std::swap(clip->effects[indice], clip->effects[static_cast<size_t>(destino)]);
+    touch();
+    return OpResult::exito();
+}
+
+OpResult Project::removeEffect(Id clipId, size_t indice) {
+    Clip* clip = nullptr;
+    if (OpResult r = clipConEfectos(clipId, &clip); !r) return r;
+    if (indice >= clip->effects.size()) return OpResult::fallo("El efecto no existe.");
+    clip->effects.erase(clip->effects.begin() + static_cast<std::ptrdiff_t>(indice));
     touch();
     return OpResult::exito();
 }

@@ -74,6 +74,7 @@
     <ClInclude Include="Transition.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Effect.cpp" />
     <ClCompile Include="Project.cpp" />
     <ClCompile Include="Tiempo.cpp" />
   </ItemGroup>

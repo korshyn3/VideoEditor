@@ -79,6 +79,7 @@
     <ClCompile Include="TestAudio.cpp" />
     <ClCompile Include="TestController.cpp" />
     <ClCompile Include="TestCortes.cpp" />
+    <ClCompile Include="TestEfectos.cpp" />
     <ClCompile Include="TestEscalaTiempo.cpp" />
     <ClCompile Include="TestFFmpegError.cpp" />
     <ClCompile Include="TestMediaProbe.cpp" />
