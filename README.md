@@ -56,6 +56,22 @@ ffmpeg -i a.mp4 -i b.mp4 -/filter_complex grafo.txt -map "[vout]" -map "[aout]" 
 mismo tiempo, una vez por segundo. Al importarlo y reproducirlo en el editor, el pitido
 debe oírse justo cuando la pantalla se pone blanca.
 
+### Exportación con `h264_mf` (bitrate)
+
+Los encoders de MediaFoundation (`h264_mf`, `hevc_mf`) dependen del hardware, por eso el
+diálogo Exportar solo ofrece los que abren en el equipo (si no, queda `mpeg4` por
+software). Respetan el bitrate de forma aproximada. Para medirlo:
+
+```
+bin\Debug\EditorTests.exe -tc="Medir h264_mf" --no-skip
+ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate,avg_frame_rate,duration ^
+        %TEMP%\editor_tests\h264_mf_2000.mp4
+```
+
+En el equipo de desarrollo, 10 s a 720p pedidos a 2000 kbps dieron **2053 kbps** de media
+(+2.6 %), con 25 fps y 10.000 s exactos. Como tolerancia se considera aceptable hasta un
+±10 % respecto del bitrate pedido.
+
 ## Arquitectura: capas y dependencias
 
 ```

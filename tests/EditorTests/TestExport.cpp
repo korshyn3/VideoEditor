@@ -189,3 +189,20 @@ TEST_CASE("Cancelar borra el archivo parcial y la edición queda bloqueada mient
     CHECK_FALSE(std::filesystem::exists(ruta(salidaTemporal("cancelado.mp4"))));
     CHECK(ctrl.addTrack(TrackKind::Video).ok);  // la edición vuelve a estar habilitada
 }
+
+// Herramienta (omitida por defecto) para la tarea 9.5: exporta 10 s con h264_mf a 2000
+// kbps y deja el archivo en la carpeta temporal para medirlo con ffprobe. Uso:
+//   EditorTests.exe -tc="Medir h264_mf" --no-skip
+TEST_CASE("Medir h264_mf" * doctest::skip()) {
+    REQUIRE(EncoderCatalog::admite(Container::Mp4, "h264_mf"));
+    controller::EditorController ctrl;
+    REQUIRE(ctrl.importFiles({medioPrueba("video_audio.mp4"), medioPrueba("video_audio.mp4")}).clips.size() == 2);
+    ExportSettings e = configuracion(Container::Mp4, salidaTemporal("h264_mf_2000.mp4"));
+    e.videoCodec = "h264_mf";
+    e.videoBitrateKbps = 2000;
+    e.preset = ResolutionPreset::P720;
+    REQUIRE(ctrl.startExport(e));
+    ctrl.esperarExport();
+    REQUIRE_MESSAGE(ctrl.resultadoExport().estado == engine::ExportEstado::Terminado, ctrl.resultadoExport().error);
+    MESSAGE("Exportado: " << salidaTemporal("h264_mf_2000.mp4"));
+}

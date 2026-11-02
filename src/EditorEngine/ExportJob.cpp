@@ -58,6 +58,9 @@ int codificar(Salida& s, AVCodecContext* enc, AVStream* stream, AVFrame* cuadro)
         r = avcodec_receive_packet(enc, s.paquete);
         if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) return 0;
         if (r < 0) return r;
+        // Los encoders MF no ponen la duración de los paquetes de video: sin ella, el
+        // muxer calcula el stream un cuadro más corto (la base de tiempo es 1/fps).
+        if (s.paquete->duration <= 0 && enc->codec_type == AVMEDIA_TYPE_VIDEO) s.paquete->duration = 1;
         av_packet_rescale_ts(s.paquete, enc->time_base, stream->time_base);
         s.paquete->stream_index = stream->index;
         r = av_interleaved_write_frame(s.fmt, s.paquete);  // (toma el paquete)
