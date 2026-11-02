@@ -15,11 +15,99 @@ std::string nombreAudioDe(const Track& pistaVideo) {
     return "Audio " + pistaVideo.name;
 }
 
-// true si ningún par de clips de la pista se solapa.
+Clip* buscarClip(Timeline& tl, Id id, Track** pista = nullptr) {
+    for (Track& t : tl.tracks) {
+        for (Clip& c : t.clips) {
+            if (c.id == id) {
+                if (pista) *pista = &t;
+                return &c;
+            }
+        }
+    }
+    return nullptr;
+}
+
+Track* buscarPista(Timeline& tl, Id id) {
+    for (Track& t : tl.tracks)
+        if (t.id == id) return &t;
+    return nullptr;
+}
+
+// Índice del clip en la pista (o -1).
+int indiceDe(const Track& t, Id id) {
+    for (size_t i = 0; i < t.clips.size(); ++i)
+        if (t.clips[i].id == id) return static_cast<int>(i);
+    return -1;
+}
+
+const Transition* transicionEntre(const Track& t, Id from, Id to) {
+    for (const Transition& tr : t.transitions)
+        if (tr.fromClipId == from && tr.toClipId == to) return &tr;
+    return nullptr;
+}
+
+// Después de editar: cada transición dura lo que se solapan sus clips. Se quita si sus
+// clips ya no están en la pista, no son consecutivos o dejaron de solaparse.
+// (Los clips deben estar ordenados.)
+void normalizarTransiciones(Track& t) {
+    std::vector<Transition> validas;
+    for (Transition tr : t.transitions) {
+        const int i = indiceDe(t, tr.fromClipId), j = indiceDe(t, tr.toClipId);
+        if (i < 0 || j != i + 1) continue;
+        const TimeUs solape = t.clips[i].timelineEnd() - t.clips[j].timelineStart;
+        if (solape <= 0) continue;
+        tr.duration = solape;
+        validas.push_back(tr);
+    }
+    t.transitions = std::move(validas);
+}
+
+// true si la pista es válida: los clips solo se solapan con el siguiente, y solo si hay
+// una transición entre los dos (de esa duración), y las dos transiciones de un clip
+// (entrada y salida) caben en él. (Los clips deben estar ordenados.)
 bool sinSolapes(const Track& t) {
-    for (size_t i = 1; i < t.clips.size(); ++i)
-        if (t.clips[i].timelineStart < t.clips[i - 1].timelineEnd()) return false;
+    TimeUs finAnteriores = 0;  // fin de los clips antes del anterior
+    for (size_t i = 1; i < t.clips.size(); ++i) {
+        const Clip& a = t.clips[i - 1];
+        const Clip& b = t.clips[i];
+        const Transition* tr = transicionEntre(t, a.id, b.id);
+        const TimeUs permitido = tr ? tr->duration : 0;
+        if (b.timelineStart < a.timelineEnd() - permitido || b.timelineStart < finAnteriores) return false;
+        finAnteriores = std::max(finAnteriores, a.timelineEnd());
+    }
+    for (const Clip& c : t.clips) {
+        TimeUs usado = 0;
+        for (const Transition& tr : t.transitions)
+            if (tr.fromClipId == c.id || tr.toClipId == c.id) usado += tr.duration;
+        if (usado > c.duration()) return false;
+    }
     return true;
+}
+
+// Ordena y normaliza todas las pistas y devuelve la primera que quedó inválida (o nullptr).
+const Track* pistaInvalida(Timeline& tl) {
+    for (Track& t : tl.tracks) {
+        std::sort(t.clips.begin(), t.clips.end(),
+                  [](const Clip& a, const Clip& b) { return a.timelineStart < b.timelineStart; });
+        normalizarTransiciones(t);
+    }
+    for (const Track& t : tl.tracks)
+        if (!sinSolapes(t)) return &t;
+    return nullptr;
+}
+
+// Corre `delta` los clips de la pista que empiezan en `desde` o después, y sus clips
+// vinculados (en otras pistas).
+void correrDesde(Timeline& tl, const Track& pista, TimeUs desde, TimeUs delta) {
+    std::vector<Id> ids;
+    for (const Clip& c : pista.clips) {
+        if (c.timelineStart < desde) continue;
+        ids.push_back(c.id);
+        if (c.vinculado()) ids.push_back(c.linkedClipId);
+    }
+    for (Track& t : tl.tracks)
+        for (Clip& c : t.clips)
+            if (std::find(ids.begin(), ids.end(), c.id) != ids.end()) c.timelineStart += delta;
 }
 
 // Ajusta los fades del clip a su duración (después de dividirlo o recortarlo): el fade
@@ -129,14 +217,6 @@ TimeUs Project::frameDuration() const {
     const Rational& f = canvas_.fps;
     if (!f.valido()) return kMicrosPorSegundo / 30;
     return std::max<TimeUs>(1, (kMicrosPorSegundo * f.den + f.num / 2) / f.num);
-}
-
-bool Project::overlaps(const Track& track, TimeUs start, TimeUs end, Id ignorar) {
-    for (const Clip& c : track.clips) {
-        if (c.id == ignorar) continue;
-        if (start < c.timelineEnd() && c.timelineStart < end) return true;
-    }
-    return false;
 }
 
 void Project::sortClips(Track& track) {
@@ -326,24 +406,6 @@ OpResult Project::moveClips(const std::vector<Id>& clipIds, TimeUs delta, bool s
 
 namespace {
 
-Clip* buscarClip(Timeline& tl, Id id, Track** pista = nullptr) {
-    for (Track& t : tl.tracks) {
-        for (Clip& c : t.clips) {
-            if (c.id == id) {
-                if (pista) *pista = &t;
-                return &c;
-            }
-        }
-    }
-    return nullptr;
-}
-
-Track* buscarPista(Timeline& tl, Id id) {
-    for (Track& t : tl.tracks)
-        if (t.id == id) return &t;
-    return nullptr;
-}
-
 void quitarClip(Track& t, Id id) {
     std::erase_if(t.clips, [id](const Clip& c) { return c.id == id; });
     std::erase_if(t.transitions, [id](const Transition& tr) { return tr.fromClipId == id || tr.toClipId == id; });
@@ -384,6 +446,8 @@ void Project::cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin) {
             der.timelineStart = fin;
             x->sourceOut = x->sourceIn + (ini - xi);
             repartirFades(*x, der);
+            for (Transition& tr : t->transitions)
+                if (tr.fromClipId == id) tr.fromClipId = idDerecho;
             t->clips.push_back(der);  // (invalida `x`)
             sortClips(*t);
         }
@@ -445,20 +509,19 @@ OpResult Project::aplicarMovimientos(std::vector<Destino> destinos, bool sobresc
         if (!t) return OpResult::fallo("La pista destino no existe.");
         t->clips.push_back(col.clip);
     }
-    for (Track& t : nuevo.tracks) {
-        sortClips(t);
-        if (!sinSolapes(t))
-            return OpResult::fallo("El movimiento haría que un clip se solape con otro en la pista " + t.name +
-                                   ". (Con Shift se sobrescriben los clips de debajo.)");
-    }
+    if (const Track* mala = pistaInvalida(nuevo))
+        return OpResult::fallo("El movimiento haría que un clip se solape con otro en la pista " + mala->name +
+                               ". (Con Shift se sobrescriben los clips de debajo.)");
+    confirmar(nuevo);
+    return OpResult::exito();
+}
 
-    // Se copia pista por pista (mismo orden) para no invalidar punteros a las pistas.
+void Project::confirmar(Timeline& nuevo) {
     for (size_t i = 0; i < timeline_.tracks.size(); ++i) {
         timeline_.tracks[i].clips = std::move(nuevo.tracks[i].clips);
         timeline_.tracks[i].transitions = std::move(nuevo.tracks[i].transitions);
     }
     touch();
-    return OpResult::exito();
 }
 
 OpResult Project::split(Id clipId, TimeUs t, Id* clipDerecho) {
@@ -467,6 +530,19 @@ OpResult Project::split(Id clipId, TimeUs t, Id* clipDerecho) {
     // Estrictamente dentro: en un borde (o fuera) no hay nada que dividir.
     if (t <= clip->timelineStart || t >= clip->timelineEnd())
         return OpResult::fallo("El cursor no está dentro del clip seleccionado.");
+    // Dentro del tramo de una transición (donde el clip se solapa con su vecino) no se
+    // puede dividir.
+    for (const Track& pista : timeline_.tracks) {
+        for (const Transition& tr : pista.transitions) {
+            const Clip* from = pista.findClip(tr.fromClipId);
+            const Clip* to = pista.findClip(tr.toClipId);
+            if (!from || !to || (from->id != clipId && to->id != clipId && from->id != clip->linkedClipId &&
+                                 to->id != clip->linkedClipId))
+                continue;
+            if (t >= to->timelineStart && t < from->timelineEnd())
+                return OpResult::fallo("No se puede dividir dentro de una transición.");
+        }
+    }
 
     const Id vinculado = clip->linkedClipId;
     const Id derecho = newId();
@@ -516,25 +592,26 @@ OpResult Project::trimClip(Id clipId, TimeUs newIn, TimeUs newOut) {
         return OpResult::fallo("El clip debe durar al menos un cuadro.");
 
     const TimeUs newStart = clip->timelineStart + (newIn - clip->sourceIn);
-    const TimeUs newEnd = newStart + (newOut - newIn);
-    if (overlaps(*track, newStart, newEnd, clipId))
-        return OpResult::fallo("El recorte haría que el clip se solape con un clip vecino.");
 
-    // El clip vinculado recibe el mismo recorte (tienen el mismo tramo y posición).
-    Track* pistaVinculado = nullptr;
-    Clip* vinculado = clip->vinculado() ? findClipMut(clip->linkedClipId, &pistaVinculado) : nullptr;
-    if (vinculado && overlaps(*pistaVinculado, newStart, newEnd, vinculado->id))
-        return OpResult::fallo("El recorte haría que el clip vinculado se solape con un clip de la pista " +
-                               pistaVinculado->name + ".");
-
-    for (Clip* c : {clip, vinculado}) {
+    // El clip vinculado recibe el mismo recorte (tienen el mismo tramo y posición). Se
+    // trabaja sobre una copia: una transición del borde recortado cambia de duración (o
+    // desaparece si los clips dejan de solaparse).
+    Timeline nuevo = timeline_;
+    for (Id id : {clipId, clip->linkedClipId}) {
+        Clip* c = (id != kSinId) ? buscarClip(nuevo, id) : nullptr;
         if (!c) continue;
         c->sourceIn = newIn;
         c->sourceOut = newOut;
         c->timelineStart = newStart;
         ajustarFades(*c);
     }
-    touch();
+    if (const Track* mala = pistaInvalida(nuevo)) {
+        if (mala->id == track->id)
+            return OpResult::fallo("El recorte haría que el clip se solape con un clip vecino.");
+        return OpResult::fallo("El recorte haría que el clip vinculado se solape con un clip de la pista " +
+                               mala->name + ".");
+    }
+    confirmar(nuevo);
     return OpResult::exito();
 }
 
@@ -580,18 +657,11 @@ OpResult Project::removeClip(Id clipId, bool ripple) {
                 if (std::binary_search(correr.begin(), correr.end(), c.id)) c.timelineStart -= duracion;
             sortClips(t);
         }
-        for (const Track& t : nuevo.tracks)
-            if (!sinSolapes(t))
-                return OpResult::fallo("Al cerrar el hueco, un clip vinculado se solaparía con otro clip de la pista " +
-                                       t.name + ". Usa la eliminación normal.");
+        if (const Track* mala = pistaInvalida(nuevo))
+            return OpResult::fallo("Al cerrar el hueco, un clip vinculado se solaparía con otro clip de la pista " +
+                                   mala->name + ". Usa la eliminación normal.");
     }
-
-    // Se copia pista por pista (mismo orden) para no invalidar punteros a las pistas.
-    for (size_t i = 0; i < timeline_.tracks.size(); ++i) {
-        timeline_.tracks[i].clips = std::move(nuevo.tracks[i].clips);
-        timeline_.tracks[i].transitions = std::move(nuevo.tracks[i].transitions);
-    }
-    touch();
+    confirmar(nuevo);
     return OpResult::exito();
 }
 
@@ -602,6 +672,151 @@ OpResult Project::unlinkAudio(Id clipId) {
     if (Clip* otro = findClipMut(clip->linkedClipId)) otro->linkedClipId = kSinId;
     clip->linkedClipId = kSinId;
     touch();
+    return OpResult::exito();
+}
+
+struct Project::DatosTransicion {
+    const Track* pista = nullptr;
+    const Clip* from = nullptr;
+    const Clip* to = nullptr;              // clip siguiente en la pista
+    const Transition* actual = nullptr;    // transición que ya sale de `from` (o nullptr)
+};
+
+OpResult Project::datosTransicion(Id fromClipId, DatosTransicion& d) const {
+    d.from = timeline_.findClip(fromClipId, &d.pista);
+    if (!d.from) return OpResult::fallo("El clip no existe.");
+    if (d.pista->kind != TrackKind::Video)
+        return OpResult::fallo("Las transiciones se agregan entre clips de video.");
+    const int i = indiceDe(*d.pista, fromClipId);
+    if (i + 1 >= static_cast<int>(d.pista->clips.size()))
+        return OpResult::fallo("No hay ningún clip después de este en la pista " + d.pista->name + ".");
+    d.to = &d.pista->clips[i + 1];
+    d.actual = transicionEntre(*d.pista, d.from->id, d.to->id);
+    return OpResult::exito();
+}
+
+const Transition* Project::transitionFrom(Id fromClipId) const {
+    for (const Track& t : timeline_.tracks)
+        for (const Transition& tr : t.transitions)
+            if (tr.fromClipId == fromClipId) return &tr;
+    return nullptr;
+}
+
+TimeUs Project::maxTransitionDuration(Id fromClipId) const {
+    DatosTransicion d;
+    if (!datosTransicion(fromClipId, d)) return 0;
+    // Cada clip cede lo que no usa su otra transición (la de entrada de `from`, la de
+    // salida de `to`).
+    TimeUs otraFrom = 0, otraTo = 0;
+    for (const Transition& tr : d.pista->transitions) {
+        if (tr.toClipId == d.from->id) otraFrom = tr.duration;
+        if (tr.fromClipId == d.to->id) otraTo = tr.duration;
+    }
+    return std::max<TimeUs>(0, std::min(d.from->duration() - otraFrom, d.to->duration() - otraTo));
+}
+
+namespace {
+
+// Transición espejo entre los audios vinculados de una transición de video (o nullptr).
+Transition* espejoDe(Timeline& tl, const Clip& from, const Clip& to, Track** pistaAudio = nullptr) {
+    if (!from.vinculado() || !to.vinculado()) return nullptr;
+    for (Track& t : tl.tracks) {
+        for (Transition& tr : t.transitions) {
+            if (tr.fromClipId == from.linkedClipId && tr.toClipId == to.linkedClipId) {
+                if (pistaAudio) *pistaAudio = &t;
+                return &tr;
+            }
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+OpResult Project::addTransition(Id fromClipId, TransitionStyle estilo, TimeUs duracion) {
+    DatosTransicion d;
+    if (OpResult r = datosTransicion(fromClipId, d); !r) return r;
+    if (d.actual) return OpResult::fallo("Ya hay una transición entre estos clips; cámbiala o quítala.");
+    if (d.to->timelineStart != d.from->timelineEnd())
+        return OpResult::fallo("Los clips deben estar contiguos (sin hueco entre ellos) para agregar una transición.");
+    if (duracion < frameDuration()) return OpResult::fallo("La transición debe durar al menos un cuadro.");
+    const TimeUs maximo = maxTransitionDuration(fromClipId);
+    if (duracion > maximo)
+        return OpResult::fallo("La transición no puede durar más de " + segundosTexto(maximo) +
+                               " s (lo que permiten los dos clips).");
+
+    // Sobre una copia: el clip siguiente y los posteriores (con sus audios) se adelantan.
+    Timeline nuevo = timeline_;
+    Track* pista = buscarPista(nuevo, d.pista->id);
+    const Clip from = *d.from, to = *d.to;
+    correrDesde(nuevo, *pista, to.timelineStart, -duracion);
+    pista->transitions.push_back({from.id, to.id, estilo, duracion});
+    // Si los dos tienen audio vinculado (en la misma pista de audio), la transición espejo.
+    if (from.vinculado() && to.vinculado()) {
+        const Track* pa = nullptr;
+        const Track* pb = nullptr;
+        nuevo.findClip(from.linkedClipId, &pa);
+        nuevo.findClip(to.linkedClipId, &pb);
+        if (pa && pa == pb) buscarPista(nuevo, pa->id)->transitions.push_back({from.linkedClipId, to.linkedClipId, estilo, duracion});
+    }
+    if (const Track* mala = pistaInvalida(nuevo))
+        return OpResult::fallo("Al adelantar los clips siguientes, un clip se solaparía con otro en la pista " +
+                               mala->name + ".");
+    confirmar(nuevo);
+    return OpResult::exito();
+}
+
+OpResult Project::setTransition(Id fromClipId, TransitionStyle estilo, TimeUs duracion) {
+    DatosTransicion d;
+    if (OpResult r = datosTransicion(fromClipId, d); !r) return r;
+    if (!d.actual) return OpResult::fallo("No hay ninguna transición que salga de este clip.");
+    if (duracion < frameDuration()) return OpResult::fallo("La transición debe durar al menos un cuadro.");
+    const TimeUs maximo = maxTransitionDuration(fromClipId);
+    if (duracion > maximo)
+        return OpResult::fallo("La transición no puede durar más de " + segundosTexto(maximo) +
+                               " s (lo que permiten los dos clips).");
+
+    Timeline nuevo = timeline_;
+    Track* pista = buscarPista(nuevo, d.pista->id);
+    const Clip from = *d.from, to = *d.to;
+    const TimeUs diferencia = duracion - d.actual->duration;
+    correrDesde(nuevo, *pista, to.timelineStart, -diferencia);
+    for (Transition& tr : pista->transitions) {
+        if (tr.fromClipId == from.id) {
+            tr.style = estilo;
+            tr.duration = duracion;
+        }
+    }
+    if (Transition* espejo = espejoDe(nuevo, from, to)) {
+        espejo->style = estilo;
+        espejo->duration = duracion;
+    }
+    if (const Track* mala = pistaInvalida(nuevo))
+        return OpResult::fallo("Al correr los clips siguientes, un clip se solaparía con otro en la pista " +
+                               mala->name + ".");
+    confirmar(nuevo);
+    return OpResult::exito();
+}
+
+OpResult Project::removeTransition(Id fromClipId) {
+    DatosTransicion d;
+    if (OpResult r = datosTransicion(fromClipId, d); !r) return r;
+    if (!d.actual) return OpResult::fallo("No hay ninguna transición que salga de este clip.");
+
+    // El clip siguiente y los posteriores vuelven a correrse la duración de la transición.
+    Timeline nuevo = timeline_;
+    Track* pista = buscarPista(nuevo, d.pista->id);
+    const Clip from = *d.from, to = *d.to;
+    const TimeUs duracion = d.actual->duration;
+    Track* pistaAudio = nullptr;
+    if (espejoDe(nuevo, from, to, &pistaAudio))
+        std::erase_if(pistaAudio->transitions, [&](const Transition& tr) { return tr.fromClipId == from.linkedClipId; });
+    std::erase_if(pista->transitions, [&](const Transition& tr) { return tr.fromClipId == from.id; });
+    correrDesde(nuevo, *pista, to.timelineStart, duracion);
+    if (const Track* mala = pistaInvalida(nuevo))
+        return OpResult::fallo("Al correr los clips siguientes, un clip se solaparía con otro en la pista " +
+                               mala->name + ".");
+    confirmar(nuevo);
     return OpResult::exito();
 }
 

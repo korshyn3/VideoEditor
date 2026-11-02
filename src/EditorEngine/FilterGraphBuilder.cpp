@@ -36,14 +36,24 @@ long long cuadroRedondeado(TimeUs t, model::Rational fps) {
     return (t * fps.num * 2 + den) / (2 * den);
 }
 
-// Un tramo de una pista: un clip (o una parte) o un hueco.
+const model::Transition* transicionEntre(const model::Track& t, model::Id from, model::Id to) {
+    for (const model::Transition& tr : t.transitions)
+        if (tr.fromClipId == from && tr.toClipId == to) return &tr;
+    return nullptr;
+}
+
+// Un tramo de una pista: un hueco, un clip (o una parte) o una CADENA de clips unidos
+// por transiciones (que se renderiza con xfade/acrossfade y cuenta como un solo tramo).
 struct Segmento {
-    const model::Clip* clip = nullptr;  // nullptr = hueco
+    std::vector<const model::Clip*> clips;            // vacío = hueco
+    std::vector<const model::Transition*> transiciones; // [k] une clips[k] con clips[k + 1]
     long long cuadroIni = 0, cuadroFin = 0;  // video: [ini, fin) en la rejilla de cuadros
     TimeUs ini = 0, fin = 0;                 // audio: tiempos exactos del timeline
+    bool hueco() const { return clips.empty(); }
 };
 
-// Divide la pista en segmentos (clips y huecos) que cubren exactamente [t0, fin).
+// Divide la pista en segmentos (huecos, clips y cadenas) que cubren exactamente [t0, fin).
+// t0 no debe caer dentro de una transición (ver build).
 std::vector<Segmento> segmentar(const model::Track& pista, TimeUs t0, TimeUs fin, model::Rational fps) {
     std::vector<Segmento> segs;
     long long cursorCuadro = FilterGraphBuilder::cuadroEn(t0, fps);
@@ -51,22 +61,60 @@ std::vector<Segmento> segmentar(const model::Track& pista, TimeUs t0, TimeUs fin
     TimeUs cursor = t0;
 
     auto hueco = [&](long long hastaCuadro, TimeUs hastaT) {
-        if (hastaCuadro > cursorCuadro || hastaT > cursor)
-            segs.push_back({nullptr, cursorCuadro, std::max(cursorCuadro, hastaCuadro), cursor, std::max(cursor, hastaT)});
+        if (hastaCuadro > cursorCuadro || hastaT > cursor) {
+            Segmento h;
+            h.cuadroIni = cursorCuadro;
+            h.cuadroFin = std::max(cursorCuadro, hastaCuadro);
+            h.ini = cursor;
+            h.fin = std::max(cursor, hastaT);
+            segs.push_back(h);
+        }
     };
 
-    for (const model::Clip& c : pista.clips) {  // ya están ordenados por inicio
-        const TimeUs ini = std::max(c.timelineStart, cursor);
-        const TimeUs finClip = std::min(c.timelineEnd(), fin);
-        if (finClip <= ini) continue;  // fuera del rango pedido
-        const long long ci = std::max(cuadroRedondeado(c.timelineStart, fps), cursorCuadro);
-        const long long cf = std::min(cuadroRedondeado(c.timelineEnd(), fps), cuadroFinal);
-        if (cf <= ci) continue;  // el clip dura menos de medio cuadro en este rango
+    const auto& clips = pista.clips;  // ya están ordenados por inicio
+    for (size_t i = 0; i < clips.size();) {
+        // Cadena: el clip i y los siguientes unidos por una transición de al menos un cuadro.
+        Segmento s;
+        s.clips.push_back(&clips[i]);
+        size_t j = i + 1;
+        for (; j < clips.size(); ++j) {
+            const model::Transition* tr = transicionEntre(pista, clips[j - 1].id, clips[j].id);
+            if (!tr || cuadroRedondeado(clips[j - 1].timelineEnd(), fps) <= cuadroRedondeado(clips[j].timelineStart, fps))
+                break;
+            s.transiciones.push_back(tr);
+            s.clips.push_back(&clips[j]);
+        }
+        i = j;
+
+        const model::Clip& primero = *s.clips.front();
+        const model::Clip& ultimo = *s.clips.back();
+        const TimeUs ini = std::max(primero.timelineStart, cursor);
+        const TimeUs finTramo = std::min(ultimo.timelineEnd(), fin);
+        if (finTramo <= ini) continue;  // fuera del rango pedido
+        const long long ci = std::max(cuadroRedondeado(primero.timelineStart, fps), cursorCuadro);
+        const long long cf = std::min(cuadroRedondeado(ultimo.timelineEnd(), fps), cuadroFinal);
+        if (cf <= ci) continue;  // dura menos de medio cuadro en este rango
+
+        // Se quitan de la cadena los clips que quedan enteros fuera del rango.
+        while (s.clips.size() > 1 &&
+               (s.clips.front()->timelineEnd() <= ini || cuadroRedondeado(s.clips.front()->timelineEnd(), fps) <= ci)) {
+            s.clips.erase(s.clips.begin());
+            s.transiciones.erase(s.transiciones.begin());
+        }
+        while (s.clips.size() > 1 &&
+               (s.clips.back()->timelineStart >= finTramo || cuadroRedondeado(s.clips.back()->timelineStart, fps) >= cf)) {
+            s.clips.pop_back();
+            s.transiciones.pop_back();
+        }
 
         hueco(ci, ini);
-        segs.push_back({&c, ci, cf, ini, finClip});
+        s.cuadroIni = ci;
+        s.cuadroFin = cf;
+        s.ini = ini;
+        s.fin = finTramo;
+        segs.push_back(s);
         cursorCuadro = cf;
-        cursor = finClip;
+        cursor = finTramo;
     }
     hueco(cuadroFinal, fin);
     return segs;
@@ -117,10 +165,42 @@ std::string cadenaHuecoVideo(const RenderSettings& s, long long n) {
            ",format=yuv420p,setsar=1,trim=end_frame=" + std::to_string(n);
 }
 
+// Estilo del modelo -> transición de xfade (design.md, D4).
+const char* estiloXfade(model::TransitionStyle e) {
+    switch (e) {
+    case model::TransitionStyle::WipeLeft: return "wipeleft";
+    case model::TransitionStyle::WipeRight: return "wiperight";
+    case model::TransitionStyle::SlideLeft: return "slideleft";
+    case model::TransitionStyle::SlideRight: return "slideright";
+    case model::TransitionStyle::Circle: return "circleopen";
+    default: return "fade";
+    }
+}
+
 const char* kFormatoAudio = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
 
 std::string cadenaSilencio(TimeUs dur) {
     return std::string("anullsrc=r=48000:cl=stereo,") + kFormatoAudio + ",atrim=duration=" + seg(dur);
+}
+
+// Fundidos de un audio vinculado cuyo video tiene una transición que el audio no tiene
+// (el otro clip no tiene audio): el audio se desvanece (o aparece) durante la transición.
+void fadesPorTransicion(const model::Timeline& tl, const model::Track& pistaAudio, const model::Clip& audio,
+                        TimeUs& fadeIn, TimeUs& fadeOut) {
+    fadeIn = fadeOut = 0;
+    if (!audio.vinculado()) return;
+    const model::Track* pistaVideo = nullptr;
+    const model::Clip* video = tl.findClip(audio.linkedClipId, &pistaVideo);
+    if (!video || pistaVideo->kind != model::TrackKind::Video) return;
+    auto tieneTransicion = [&](bool salida) {
+        for (const model::Transition& tr : pistaAudio.transitions)
+            if ((salida ? tr.fromClipId : tr.toClipId) == audio.id) return true;
+        return false;
+    };
+    for (const model::Transition& tr : pistaVideo->transitions) {
+        if (tr.fromClipId == video->id && !tieneTransicion(true)) fadeOut = tr.duration;
+        if (tr.toClipId == video->id && !tieneTransicion(false)) fadeIn = tr.duration;
+    }
 }
 
 } // namespace
@@ -159,6 +239,47 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     d.fin = (hasta < 0) ? duracion : std::clamp(hasta, d.t0 + 1, duracion);
     if (d.fin <= d.t0) d.fin = std::min(duracion, d.t0 + tiempoDeCuadro(1, fps));
 
+    // Pistas que se renderizan: V1 (las superiores se agregan en la fase 8) y todas las
+    // de audio no silenciadas (de video y generales; los clips de video no aportan audio,
+    // su audio es un clip vinculado).
+    std::vector<const model::Track*> pistasAudioActivas;
+    for (const model::Track& t : snap.timeline.tracks)
+        if (t.kind == model::TrackKind::Audio && !t.muted) pistasAudioActivas.push_back(&t);
+
+    // Si T0 cae DENTRO de una transición, el grafo arranca al inicio de la transición
+    // (xfade/acrossfade necesitan los dos clips desde ahí) y los cuadros y muestras
+    // anteriores a T0 se descartan a la salida.
+    long long cuadroGrafo = cuadro0;
+    for (int vuelta = 0; vuelta < 16; ++vuelta) {
+        bool cambio = false;
+        auto retroceder = [&](const model::Track& t, bool video) {
+            for (const model::Transition& tr : t.transitions) {
+                const model::Clip* from = t.findClip(tr.fromClipId);
+                const model::Clip* to = t.findClip(tr.toClipId);
+                if (!from || !to) continue;
+                if (video) {
+                    const long long ini = cuadroRedondeado(to->timelineStart, fps);
+                    if (cuadroGrafo > ini && cuadroGrafo < cuadroRedondeado(from->timelineEnd(), fps)) {
+                        cuadroGrafo = ini;
+                        cambio = true;
+                    }
+                } else {
+                    const TimeUs tg = tiempoDeCuadro(cuadroGrafo, fps);
+                    if (tg > to->timelineStart && tg < from->timelineEnd()) {
+                        cuadroGrafo = cuadroEn(to->timelineStart, fps);
+                        cambio = true;
+                    }
+                }
+            }
+        };
+        retroceder(*v1, true);
+        for (const model::Track* t : pistasAudioActivas) retroceder(*t, false);
+        if (!cambio) break;
+    }
+    const TimeUs tGrafo = tiempoDeCuadro(cuadroGrafo, fps);
+    const long long cuadrosDescartados = cuadro0 - cuadroGrafo;
+    const long long muestrasDescartadas = (d.t0 - tGrafo) * kSampleRate / kUs;
+
     std::string g;
     int nEntrada = 0;
     auto nuevaEntrada = [&](const model::Clip& c, bool video, TimeUs inicioTimeline, TimeUs finTimeline) {
@@ -175,53 +296,142 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         return in;
     };
 
-    // ---- Video: pista V1 (las pistas superiores se agregan en la fase 8) ----
-    const auto segsV1 = segmentar(*v1, d.t0, d.fin, fps);
+    // ---- Video: pista V1 ----
+    // Un segmento de video con la etiqueta dada: hueco negro, un clip, o una cadena de
+    // clips unidos con xfade. Cada clip de una cadena se renderiza hasta su final; la
+    // salida de xfade dura la + lb - D, y al final la cadena se corta a su rango.
+    auto segmentoVideo = [&](const Segmento& s, const std::string& etiqueta) {
+        const long long n = s.cuadroFin - s.cuadroIni;
+        if (s.hueco()) {
+            g += cadenaHuecoVideo(salida, n) + "[" + etiqueta + "];\n";
+            return;
+        }
+        if (s.clips.size() == 1) {
+            const model::Clip& c = *s.clips[0];
+            const TimeUs iniSeg = tiempoDeCuadro(s.cuadroIni, fps);
+            const GraphInput in = nuevaEntrada(c, true, iniSeg, tiempoDeCuadro(s.cuadroFin, fps));
+            const TimeUs desdeInicioClip = std::max<TimeUs>(0, iniSeg - c.timelineStart);
+            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desdeInicioClip) + "[" + etiqueta + "];\n";
+            return;
+        }
+        std::string anterior;
+        long long acumulado = 0;  // cuadros que lleva la salida de la cadena
+        for (size_t k = 0; k < s.clips.size(); ++k) {
+            const model::Clip& c = *s.clips[k];
+            const long long a = (k == 0) ? s.cuadroIni : cuadroRedondeado(c.timelineStart, fps);
+            const long long b = cuadroRedondeado(c.timelineEnd(), fps);
+            const long long nk = std::max(1LL, b - a);
+            const TimeUs iniClip = tiempoDeCuadro(a, fps);
+            const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(b, fps));
+            const std::string clipEtq = etiqueta + "c" + std::to_string(k);
+            g += "[" + in.label + "]" + cadenaVideoClip(salida, nk, c, std::max<TimeUs>(0, iniClip - c.timelineStart)) +
+                 "[" + clipEtq + "];\n";
+            if (k == 0) {
+                anterior = clipEtq;
+                acumulado = nk;
+                continue;
+            }
+            const model::Clip& prev = *s.clips[k - 1];
+            const long long dk = std::clamp(
+                cuadroRedondeado(prev.timelineEnd(), fps) - cuadroRedondeado(c.timelineStart, fps), 1LL,
+                std::min(acumulado, nk));
+            const std::string x = etiqueta + "x" + std::to_string(k);
+            g += "[" + anterior + "][" + clipEtq + "]xfade=transition=" + estiloXfade(s.transiciones[k - 1]->style) +
+                 ":duration=" + seg(tiempoDeCuadro(dk, fps)) + ":offset=" + seg(tiempoDeCuadro(acumulado - dk, fps)) +
+                 "[" + x + "];\n";
+            anterior = x;
+            acumulado += nk - dk;
+        }
+        g += "[" + anterior + "]tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + std::to_string(n) +
+             ",setpts=PTS-STARTPTS[" + etiqueta + "];\n";
+    };
+
+    const auto segsV1 = segmentar(*v1, tGrafo, d.fin, fps);
     std::string concatV;
     for (size_t i = 0; i < segsV1.size(); ++i) {
-        const Segmento& s = segsV1[i];
-        const long long n = s.cuadroFin - s.cuadroIni;
-        if (n <= 0) continue;
+        if (segsV1[i].cuadroFin - segsV1[i].cuadroIni <= 0) continue;
         const std::string etiqueta = "v1s" + std::to_string(i);
-        if (s.clip) {
-            const TimeUs iniSeg = tiempoDeCuadro(s.cuadroIni, fps);
-            const GraphInput in = nuevaEntrada(*s.clip, true, iniSeg, tiempoDeCuadro(s.cuadroFin, fps));
-            const TimeUs desdeInicioClip = std::max<TimeUs>(0, iniSeg - s.clip->timelineStart);
-            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, *s.clip, desdeInicioClip) + "[" + etiqueta + "];\n";
-        } else {
-            g += cadenaHuecoVideo(salida, n) + "[" + etiqueta + "];\n";
-        }
+        segmentoVideo(segsV1[i], etiqueta);
         concatV += "[" + etiqueta + "]";
     }
     const size_t nV = std::count(concatV.begin(), concatV.end(), '[');
     if (nV == 0) return d;
+    // Los pts de salida van en tiempo absoluto del timeline. round(): setpts trunca el
+    // resultado, y 4.6 s / (1/25) da 114.999... Al descartar cuadros se numeran por
+    // índice (N), que no depende de los pts que deja xfade.
     g += concatV + (nV > 1 ? "concat=n=" + std::to_string(nV) + ":v=1:a=0," : "") +
-         "setpts=PTS-STARTPTS+" + seg(d.t0) + "/TB[vout];\n";
+         (cuadrosDescartados > 0 ? "trim=start_frame=" + std::to_string(cuadrosDescartados) + ",setpts=round(N*" +
+                                       std::to_string(fps.den) + "/" + std::to_string(fps.num) + "/TB+"
+                                 : std::string("setpts=round(PTS-STARTPTS+")) +
+         seg(d.t0) + "/TB)[vout];\n";
 
     // ---- Audio: una pista de la mezcla por cada fuente de sonido ----
-    // Cada pista es un concat de tramos (audio de un clip o silencio) desde T0 hasta el
-    // final. Las pistas que en ese rango solo tendrían silencio no se agregan.
+    // Cada pista es un concat de tramos (audio de un clip, silencio o una cadena de
+    // clips unidos con acrossfade) desde T0 hasta el final. Las pistas que en ese rango
+    // solo tendrían silencio no se agregan.
     std::vector<std::string> pistasAudio;
     auto pistaDeAudio = [&](const model::Track& pista) {
-        const auto segs = segmentar(pista, d.t0, d.fin, fps);
+        const auto segs = segmentar(pista, tGrafo, d.fin, fps);
         const std::string prefijo = "a" + std::to_string(pistasAudio.size()) + "s";
         std::string cadena, concatA;
         int n = 0;
         bool suena = false;
+
+        // Audio de un clip desde `ini` (del timeline) durante `dur`, con sus fundidos.
+        auto audioClip = [&](const model::Clip& c, TimeUs ini, TimeUs dur, const std::string& etiqueta) {
+            const model::MediaInfo* info = snap.media.find(c.mediaId);
+            if (!info || !info->hasAudio) {
+                cadena += cadenaSilencio(dur) + "[" + etiqueta + "];\n";
+                return;
+            }
+            const GraphInput in = nuevaEntrada(c, false, ini, ini + dur);
+            TimeUs fadeIn = 0, fadeOut = 0;
+            fadesPorTransicion(snap.timeline, pista, c, fadeIn, fadeOut);
+            const TimeUs desdeInicio = std::max<TimeUs>(0, ini - c.timelineStart);
+            std::string fades;
+            if (fadeIn > desdeInicio) fades += "afade=t=in:st=0:d=" + seg(fadeIn) + ",";
+            if (fadeOut > 0) fades += "afade=t=out:st=" + seg(c.duration() - fadeOut) + ":d=" + seg(fadeOut) + ",";
+            if (!fades.empty())  // como en video: pts en el tiempo del clip para los fundidos
+                fades = "asetpts=PTS-STARTPTS+" + seg(desdeInicio) + "/TB," + fades + "asetpts=PTS-STARTPTS,";
+            cadena += "[" + in.label + "]atrim=start=" + seg(in.sourceIn) + ":end=" + seg(in.sourceIn + dur) +
+                      ",asetpts=PTS-STARTPTS,aresample=48000," + kFormatoAudio + "," + fades +
+                      "apad=whole_dur=" + seg(dur) + ",atrim=duration=" + seg(dur) + "[" + etiqueta + "];\n";
+            suena = true;
+        };
+
         for (size_t i = 0; i < segs.size(); ++i) {
             const Segmento& s = segs[i];
             const TimeUs dur = s.fin - s.ini;
             if (dur <= 0) continue;
             const std::string etiqueta = prefijo + std::to_string(i);
-            const model::MediaInfo* info = s.clip ? snap.media.find(s.clip->mediaId) : nullptr;
-            if (s.clip && info && info->hasAudio) {
-                const GraphInput in = nuevaEntrada(*s.clip, false, s.ini, s.fin);
-                cadena += "[" + in.label + "]atrim=start=" + seg(in.sourceIn) + ":end=" + seg(in.sourceIn + dur) +
-                          ",asetpts=PTS-STARTPTS,aresample=48000," + kFormatoAudio + ",apad=whole_dur=" + seg(dur) +
-                          ",atrim=duration=" + seg(dur) + "[" + etiqueta + "];\n";
-                suena = true;
-            } else {
+            if (s.hueco()) {
                 cadena += cadenaSilencio(dur) + "[" + etiqueta + "];\n";
+            } else if (s.clips.size() == 1) {
+                audioClip(*s.clips[0], s.ini, dur, etiqueta);
+            } else {
+                // Cadena: cada clip hasta su final, unidos con acrossfade (salida la + lb - D).
+                std::string anterior;
+                TimeUs acumulado = 0;
+                for (size_t k = 0; k < s.clips.size(); ++k) {
+                    const model::Clip& c = *s.clips[k];
+                    const TimeUs a = (k == 0) ? s.ini : c.timelineStart;
+                    const TimeUs dk = c.timelineEnd() - a;
+                    const std::string clipEtq = etiqueta + "c" + std::to_string(k);
+                    audioClip(c, a, dk, clipEtq);
+                    if (k == 0) {
+                        anterior = clipEtq;
+                        acumulado = dk;
+                        continue;
+                    }
+                    const TimeUs solape = std::clamp<TimeUs>(s.clips[k - 1]->timelineEnd() - c.timelineStart, 1,
+                                                             std::min(acumulado, dk));
+                    const std::string x = etiqueta + "x" + std::to_string(k);
+                    cadena += "[" + anterior + "][" + clipEtq + "]acrossfade=d=" + seg(solape) + "[" + x + "];\n";
+                    anterior = x;
+                    acumulado += dk - solape;
+                }
+                cadena += "[" + anterior + "]apad=whole_dur=" + seg(dur) + ",atrim=duration=" + seg(dur) + "[" +
+                          etiqueta + "];\n";
             }
             concatA += "[" + etiqueta + "]";
             ++n;
@@ -236,22 +446,22 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
             pistasAudio.push_back(concatA);
         }
     };
-
-    // Todo el sonido sale de las pistas de audio (de video y generales) que no están
-    // silenciadas; los clips de video no aportan audio (su audio es un clip vinculado).
-    for (const model::Track& t : snap.timeline.tracks)
-        if (t.kind == model::TrackKind::Audio && !t.muted) pistaDeAudio(t);
+    for (const model::Track* t : pistasAudioActivas) pistaDeAudio(*t);
 
     // ---- Mezcla final de audio ----
     std::string mezcla;
     for (const auto& p : pistasAudio) mezcla += p;
     if (pistasAudio.empty())
-        g += cadenaSilencio(d.fin - d.t0);
+        g += cadenaSilencio(d.fin - tGrafo);
     else if (pistasAudio.size() == 1)
         g += mezcla + "anull";
     else
         g += mezcla + "amix=inputs=" + std::to_string(pistasAudio.size()) + ":duration=longest:normalize=0";
-    g += ",asetpts=PTS-STARTPTS+" + seg(d.t0) + "/TB,aformat=sample_fmts=flt:sample_rates=48000:channel_layouts=stereo[aout]";
+    if (muestrasDescartadas > 0)
+        g += ",atrim=start_sample=" + std::to_string(muestrasDescartadas) + ",asetpts=round(N/SR/TB+";
+    else
+        g += ",asetpts=round(PTS-STARTPTS+";
+    g += seg(d.t0) + "/TB),aformat=sample_fmts=flt:sample_rates=48000:channel_layouts=stereo[aout]";
 
     d.filtros = std::move(g);
     d.vacio = false;

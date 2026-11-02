@@ -158,7 +158,7 @@ TEST_CASE("FilterGraphBuilder: arranque a mitad de un clip") {
     REQUIRE(d.inputs.size() == 1);  // A ya terminó: solo el video de B
     CHECK(d.inputs[0].sourceIn == segundosATiempo(2.0));
     CHECK(contiene(d.filtros, "trim=end_frame=75"));  // quedan 3 s de B
-    CHECK(contiene(d.filtros, "setpts=PTS-STARTPTS+12.000000/TB[vout]"));
+    CHECK(contiene(d.filtros, "setpts=round(PTS-STARTPTS+12.000000/TB)[vout]"));
 }
 
 TEST_CASE("FilterGraphBuilder: T0 se alinea a la rejilla de cuadros") {

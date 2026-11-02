@@ -27,6 +27,9 @@ struct Seleccion {
     model::Id trackId = model::kSinId;  // pista seleccionada (destino de importación)
     model::Id clipId = model::kSinId;   // clip principal: el último seleccionado (o ninguno)
     std::vector<model::Id> clips;       // todos los clips seleccionados (incluye el principal)
+    // Transición seleccionada, identificada por su clip de salida (o ninguna). Seleccionar
+    // una transición deja sin clips seleccionados, y al revés.
+    model::Id transicion = model::kSinId;
 
     bool contiene(model::Id id) const { return std::find(clips.begin(), clips.end(), id) != clips.end(); }
     bool multiple() const { return clips.size() > 1; }
@@ -91,6 +94,20 @@ public:
     model::OpResult moveEffect(model::Id clipId, size_t indice, int delta);
     model::OpResult removeEffect(model::Id clipId, size_t indice);
 
+    // Transiciones (ver Project::addTransition). Si `fromClipId` es un audio vinculado se
+    // usa su video. Agregar deja seleccionada la transición nueva.
+    // Duración por defecto de una transición nueva (limitada a lo que permiten los clips).
+    static constexpr model::TimeUs kDuracionTransicion = model::kMicrosPorSegundo;
+    model::OpResult addTransition(model::Id fromClipId,
+                                  model::TransitionStyle estilo = model::TransitionStyle::Dissolve,
+                                  model::TimeUs duracion = kDuracionTransicion);
+    model::OpResult setTransition(model::Id fromClipId, model::TransitionStyle estilo, model::TimeUs duracion);
+    // Quita la transición seleccionada.
+    model::OpResult removeSelectedTransition();
+    // Clip de video del que sale una transición desde `clipId` (él mismo, o su video si es
+    // un audio vinculado).
+    model::Id clipDeVideo(model::Id clipId) const;
+
     // ---- Selección y cursor -------------------------------------------------
     void seleccionarPista(model::Id trackId);
     // Selecciona solo ese clip (y su pista).
@@ -98,6 +115,8 @@ public:
     // Ctrl+clic: agrega el clip a la selección o lo quita.
     void alternarSeleccionClip(model::Id clipId);
     void limpiarSeleccionClip();
+    // Selecciona la transición que sale del clip (y ningún clip).
+    void seleccionarTransicion(model::Id fromClipId);
     // Mueve el cursor (y el preview, si está iniciado) a t, limitado a [0, duración].
     void setPlayhead(model::TimeUs t);
 

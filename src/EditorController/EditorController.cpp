@@ -163,6 +163,44 @@ model::OpResult EditorController::removeEffect(model::Id clipId, size_t indice) 
     return project_.removeEffect(clipId, indice);
 }
 
+model::Id EditorController::clipDeVideo(model::Id clipId) const {
+    const model::Track* pista = nullptr;
+    const model::Clip* c = project_.timeline().findClip(clipId, &pista);
+    if (c && pista->kind == model::TrackKind::Audio && c->vinculado()) return c->linkedClipId;
+    return clipId;
+}
+
+model::OpResult EditorController::addTransition(model::Id fromClipId, model::TransitionStyle estilo,
+                                                model::TimeUs duracion) {
+    fromClipId = clipDeVideo(fromClipId);
+    // Si la duración pedida es la de por defecto y no cabe, se usa la máxima posible.
+    if (duracion == kDuracionTransicion)
+        duracion = std::min(duracion, project_.maxTransitionDuration(fromClipId));
+    model::OpResult r = project_.addTransition(fromClipId, estilo, duracion);
+    if (r.ok) seleccionarTransicion(fromClipId);
+    return r;
+}
+
+model::OpResult EditorController::setTransition(model::Id fromClipId, model::TransitionStyle estilo,
+                                                model::TimeUs duracion) {
+    return project_.setTransition(clipDeVideo(fromClipId), estilo, duracion);
+}
+
+model::OpResult EditorController::removeSelectedTransition() {
+    if (seleccion_.transicion == model::kSinId) return model::OpResult::fallo("No hay ninguna transición seleccionada.");
+    model::OpResult r = project_.removeTransition(seleccion_.transicion);
+    if (r.ok) seleccion_.transicion = model::kSinId;
+    return r;
+}
+
+void EditorController::seleccionarTransicion(model::Id fromClipId) {
+    const model::Track* pista = nullptr;
+    if (!project_.transitionFrom(fromClipId) || !project_.timeline().findClip(fromClipId, &pista)) return;
+    limpiarSeleccionClip();
+    seleccion_.transicion = fromClipId;
+    seleccion_.trackId = pista->id;
+}
+
 void EditorController::seleccionarPista(model::Id trackId) {
     if (project_.timeline().findTrack(trackId)) {
         seleccion_.trackId = trackId;
@@ -176,6 +214,7 @@ void EditorController::seleccionarClip(model::Id clipId) {
         seleccion_.clipId = clipId;
         seleccion_.clips = {clipId};
         seleccion_.trackId = pista->id;
+        seleccion_.transicion = model::kSinId;
     }
 }
 
@@ -190,12 +229,14 @@ void EditorController::alternarSeleccionClip(model::Id clipId) {
         seleccion_.clips.push_back(clipId);
         seleccion_.clipId = clipId;
         seleccion_.trackId = pista->id;
+        seleccion_.transicion = model::kSinId;
     }
 }
 
 void EditorController::limpiarSeleccionClip() {
     seleccion_.clipId = model::kSinId;
     seleccion_.clips.clear();
+    seleccion_.transicion = model::kSinId;
 }
 
 void EditorController::setPlayhead(model::TimeUs t) {
@@ -256,6 +297,7 @@ void EditorController::validarSeleccion() {
     std::erase_if(seleccion_.clips, [&tl](model::Id id) { return !tl.findClip(id); });
     if (!seleccion_.contiene(seleccion_.clipId))
         seleccion_.clipId = seleccion_.clips.empty() ? model::kSinId : seleccion_.clips.back();
+    if (!project_.transitionFrom(seleccion_.transicion)) seleccion_.transicion = model::kSinId;
     if (!tl.findTrack(seleccion_.trackId)) {
         const model::Track* v1 = tl.firstTrack(model::TrackKind::Video);
         seleccion_.trackId = v1 ? v1->id : model::kSinId;

@@ -87,6 +87,7 @@
     <ClCompile Include="TestSeleccion.cpp" />
     <ClCompile Include="TestTiempo.cpp" />
     <ClCompile Include="TestTimelineEditing.cpp" />
+    <ClCompile Include="TestTransiciones.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\..\src\VideoEditor\EscalaTiempo.cpp" />
   </ItemGroup>

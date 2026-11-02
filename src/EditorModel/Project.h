@@ -111,6 +111,26 @@ public:
     OpResult moveEffect(Id clipId, size_t indice, int delta);
     OpResult removeEffect(Id clipId, size_t indice);
 
+    // ---- Transiciones (entre clips consecutivos de una pista de video) ---------
+    // Una transición se identifica por su clip de salida (`fromClipId`): cada clip tiene
+    // como mucho una transición de salida y una de entrada.
+    // Agrega una transición entre el clip y el siguiente de su pista, que debe empezar
+    // justo donde termina. El siguiente y los posteriores de la pista (con sus audios
+    // vinculados) se adelantan `duracion`, y si los dos clips tienen audio vinculado se
+    // agrega la transición espejo entre sus audios. Se rechaza si la duración es menor
+    // que un cuadro o mayor que lo que permiten los clips (maxTransitionDuration), o si
+    // algún audio vinculado se solaparía con otro clip.
+    OpResult addTransition(Id fromClipId, TransitionStyle estilo, TimeUs duracion);
+    // Cambia el estilo y la duración (los clips siguientes se corren la diferencia).
+    OpResult setTransition(Id fromClipId, TransitionStyle estilo, TimeUs duracion);
+    // Quita la transición: el clip siguiente y los posteriores vuelven a correrse.
+    OpResult removeTransition(Id fromClipId);
+    // Transición que sale del clip (en su pista), o nullptr.
+    const Transition* transitionFrom(Id fromClipId) const;
+    // Duración máxima para la transición que sale del clip (la que tenga, o una nueva):
+    // no puede superar a ninguno de los dos clips descontando su otra transición.
+    TimeUs maxTransitionDuration(Id fromClipId) const;
+
     // Duración de un cuadro del lienzo (mínimo de un clip después de un trim).
     TimeUs frameDuration() const;
 
@@ -127,8 +147,6 @@ private:
     Clip* findClipMut(Id clipId, Track** pista = nullptr);
     // Nombre siguiente para una pista nueva ("V2", "A3", ...).
     std::string nextTrackName(TrackKind kind) const;
-    // true si [start, end) se solapa con algún clip de la pista (salvo ignorar).
-    static bool overlaps(const Track& track, TimeUs start, TimeUs end, Id ignorar);
     // Inserta una pista de audio de video para la pista de video dada, después de las
     // demás pistas de audio de video (antes de las generales).
     void insertAudioTrackFor(const Track& pistaVideo);
@@ -145,6 +163,12 @@ private:
     OpResult aplicarMovimientos(std::vector<Destino> destinos, bool sobrescribir);
     // Quita del clip (y de su vinculado) el tramo [ini, fin) del timeline `tl`.
     void cortarRango(Timeline& tl, Id clipId, TimeUs ini, TimeUs fin);
+    // Reemplaza los clips y transiciones de cada pista por los de `nuevo` (mismas pistas
+    // en el mismo orden; así no se invalidan punteros a las pistas) y marca el cambio.
+    void confirmar(Timeline& nuevo);
+    // Pista y clips siguientes de una transición, para add/set/removeTransition.
+    struct DatosTransicion;
+    OpResult datosTransicion(Id fromClipId, DatosTransicion& d) const;
     // Clip de una pista de video al que se le pueden editar los efectos.
     OpResult clipConEfectos(Id clipId, Clip** clip);
     static void sortClips(Track& track);
