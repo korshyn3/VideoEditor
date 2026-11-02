@@ -80,6 +80,7 @@
   <ItemGroup>
     <ClInclude Include="EditorDlg.h" />
     <ClInclude Include="EscalaTiempo.h" />
+    <ClInclude Include="ExportarDlg.h" />
     <ClInclude Include="MensajesApp.h" />
     <ClInclude Include="PanelClipDlg.h" />
     <ClInclude Include="PanelMedioDlg.h" />
@@ -93,6 +94,7 @@
   <ItemGroup>
     <ClCompile Include="EditorDlg.cpp" />
     <ClCompile Include="EscalaTiempo.cpp" />
+    <ClCompile Include="ExportarDlg.cpp" />
     <ClCompile Include="PanelClipDlg.cpp" />
     <ClCompile Include="PanelMedioDlg.cpp" />
     <ClCompile Include="PanelTransicionDlg.cpp" />

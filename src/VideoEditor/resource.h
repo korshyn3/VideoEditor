@@ -10,6 +10,7 @@
 #define IDR_MENU_CONTEXTO_CLIP          106
 #define IDD_PROP_TRANSICION             107
 #define IDR_MENU_CONTEXTO_TRANSICION    108
+#define IDD_EXPORTAR                    109
 #define IDC_BTN_IMPORTAR                1000
 #define IDC_BTN_PLAY                    1001
 #define IDC_BTN_SPLIT                   1002
@@ -54,6 +55,18 @@
 #define IDC_PIP_VALOR2                  1041
 #define IDC_PIP_VALOR3                  1042
 #define IDC_PIP_VALOR4                  1043
+#define IDC_EXP_CONTENEDOR              1044
+#define IDC_EXP_VCODEC                  1045
+#define IDC_EXP_ACODEC                  1046
+#define IDC_EXP_VBITRATE                1047
+#define IDC_EXP_ABITRATE                1048
+#define IDC_EXP_PRESET                  1049
+#define IDC_EXP_ANCHO                   1050
+#define IDC_EXP_ALTO                    1051
+#define IDC_EXP_RUTA                    1052
+#define IDC_EXP_EXAMINAR                1053
+#define IDC_EXP_PROGRESO                1054
+#define IDC_EXP_ESTADO                  1055
 #define ID_ARCHIVO_IMPORTAR             32771
 #define ID_ARCHIVO_SALIR                32772
 #define ID_PISTAS_AGREGAR_VIDEO         32773
@@ -67,14 +80,15 @@
 #define ID_EDITAR_DESVINCULAR_AUDIO     32781
 #define ID_EDITAR_AGREGAR_TRANSICION    32782
 #define ID_EDITAR_QUITAR_TRANSICION     32783
+#define ID_ARCHIVO_EXPORTAR             32784
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        109
-#define _APS_NEXT_COMMAND_VALUE         32784
-#define _APS_NEXT_CONTROL_VALUE         1044
+#define _APS_NEXT_RESOURCE_VALUE        110
+#define _APS_NEXT_COMMAND_VALUE         32785
+#define _APS_NEXT_CONTROL_VALUE         1056
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

@@ -10,6 +10,7 @@
 // y qué clip están seleccionados y dónde está el cursor de reproducción.
 #pragma once
 
+#include "EditorEngine/EncoderCatalog.h"
 #include "EditorEngine/ExportJob.h"
 #include "EditorEngine/MediaProbe.h"
 #include "EditorEngine/PlaybackEngine.h"
@@ -135,6 +136,8 @@ public:
     // contenedor. (Si el archivo ya existe lo pregunta la View, con salidaExiste.)
     model::OpResult validarExportacion(const model::ExportSettings& s) const;
     static bool salidaExiste(const std::string& rutaUtf8);
+    // Encoders de video o de audio que funcionan en este equipo y admite el contenedor.
+    static std::vector<engine::EncoderInfo> encodersPara(model::Container contenedor, bool video);
     // Guarda la configuración en el proyecto y empieza a exportar en segundo plano.
     // `aviso` se llama desde el hilo de exportación al terminar.
     model::OpResult startExport(const model::ExportSettings& s, std::function<void()> aviso = {});

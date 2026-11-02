@@ -1,6 +1,7 @@
 // EditorDlg.cpp
 // Capa: VIEW (MFC). Ver EditorDlg.h.
 #include "EditorDlg.h"
+#include "ExportarDlg.h"
 #include "MensajesApp.h"
 #include "Utf8.h"
 
@@ -51,6 +52,8 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_WM_GETMINMAXINFO()
     ON_BN_CLICKED(IDC_BTN_IMPORTAR, &CEditorDlg::OnImportar)
     ON_COMMAND(ID_ARCHIVO_IMPORTAR, &CEditorDlg::OnImportar)
+    ON_BN_CLICKED(IDC_BTN_EXPORTAR, &CEditorDlg::OnExportar)
+    ON_COMMAND(ID_ARCHIVO_EXPORTAR, &CEditorDlg::OnExportar)
     ON_COMMAND(ID_ARCHIVO_SALIR, &CEditorDlg::OnSalir)
     ON_COMMAND(ID_PISTAS_AGREGAR_VIDEO, &CEditorDlg::OnAgregarPistaVideo)
     ON_COMMAND(ID_PISTAS_AGREGAR_AUDIO, &CEditorDlg::OnAgregarPistaAudio)
@@ -139,6 +142,18 @@ void CEditorDlg::OnDestroy() {
     // El hilo de render se detiene ANTES de que la ventana deje de existir.
     m_controller.detenerPreview();
     CDialogEx::OnDestroy();
+}
+
+void CEditorDlg::OnExportar() {
+    if (m_controller.project().timeline().empty()) {
+        AfxMessageBox(L"El timeline está vacío: importa algún archivo antes de exportar.", MB_ICONINFORMATION);
+        return;
+    }
+    // Diálogo modal: mientras está abierto no se puede editar (y el controller rechaza
+    // los cambios durante la exportación).
+    CExportarDlg dlg(m_controller, this);
+    dlg.DoModal();
+    RefrescarVista();
 }
 
 void CEditorDlg::OnSalir() {
@@ -364,6 +379,7 @@ void CEditorDlg::ActualizarPropiedades() {
     const model::Clip* clip = p.timeline().findClip(sel.clipId, &pista);
     // Dividir se aplica a toda la selección; desvincular y recortar, solo a un clip.
     GetDlgItem(IDC_BTN_SPLIT)->EnableWindow(!sel.clips.empty());
+    GetDlgItem(IDC_BTN_EXPORTAR)->EnableWindow(!p.timeline().empty());
     GetDlgItem(IDC_BTN_DESVINCULAR_AUDIO)->EnableWindow(clip != nullptr && clip->vinculado() && !sel.multiple());
     if (sel.multiple()) {
         CString linea;

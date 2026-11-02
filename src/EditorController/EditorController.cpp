@@ -274,6 +274,10 @@ std::string EditorController::conExtension(const std::string& rutaUtf8, model::C
     return std::string(u.begin(), u.end());
 }
 
+std::vector<engine::EncoderInfo> EditorController::encodersPara(model::Container contenedor, bool video) {
+    return engine::EncoderCatalog::para(contenedor, video);
+}
+
 bool EditorController::salidaExiste(const std::string& rutaUtf8) {
     std::error_code ec;
     return std::filesystem::exists(rutaDesdeUtf8(rutaUtf8), ec);

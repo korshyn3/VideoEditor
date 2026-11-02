@@ -46,6 +46,7 @@ protected:
     afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
     afx_msg void OnImportar();
+    afx_msg void OnExportar();
     afx_msg void OnSalir();
     afx_msg void OnAgregarPistaVideo();
     afx_msg void OnAgregarPistaAudio();
