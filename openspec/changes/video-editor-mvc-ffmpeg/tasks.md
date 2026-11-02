@@ -80,8 +80,8 @@
 
 ## 10. Persistencia del proyecto (JSON)
 
-- [ ] 10.1 Implementar `ProjectSerializer` (formatVersion 1, todas las entidades —incluidos `videoTrackId` de las pistas y `linkedClipId` de los clips—, validación completa antes de reemplazar el proyecto, incluido que los vínculos sean coherentes); verificar con tests "Guardar", "Ida y vuelta" (conserva los vínculos) y "JSON corrupto"
-- [ ] 10.2 Implementar en el controller la revalidación de medios al cargar (clips offline renderizados en negro y en silencio, aviso con rutas faltantes); verificar con un test "Archivo movido"
+- [x] 10.1 Implementar `ProjectSerializer` (formatVersion 1, todas las entidades —incluidos `videoTrackId` de las pistas y `linkedClipId` de los clips—, validación completa antes de reemplazar el proyecto, incluido que los vínculos sean coherentes); verificar con tests "Guardar", "Ida y vuelta" (conserva los vínculos) y "JSON corrupto"
+- [x] 10.2 Implementar en el controller la revalidación de medios al cargar (clips offline renderizados en negro y en silencio, aviso con rutas faltantes); verificar con un test "Archivo movido"
 - [ ] 10.3 Conectar Archivo → Nuevo/Abrir/Guardar/Guardar como (`CFileDialog` con filtro `.json`, Ctrl+S) y el aviso de cambios sin guardar (Sí/No/Cancelar) en `OnClose`, Nuevo y Abrir; verificar a mano "Cerrar con cambios"
 
 ## 11. Integración final

@@ -148,8 +148,16 @@ public:
 
     // El proyecto se guardó: ya no hay cambios pendientes.
     void markSaved() { dirty_ = false; }
+    // Marca un medio como offline (no se encontró al abrir el proyecto) o disponible.
+    // No es un cambio del proyecto: no lo marca como modificado.
+    void setMediaOffline(Id mediaId, bool offline);
 
 private:
+    friend class ProjectSerializer;  // reconstruye el proyecto (con sus ids) al cargar
+
+    // Ordena y valida las pistas como después de cada edición (ver Project.cpp) y
+    // devuelve la primera inválida, o nullptr.
+    static const Track* primeraPistaInvalida(Timeline& tl);
     Track* findTrackMut(Id trackId);
     // Clip modificable y su pista (nullptr si no existe).
     Clip* findClipMut(Id clipId, Track** pista = nullptr);

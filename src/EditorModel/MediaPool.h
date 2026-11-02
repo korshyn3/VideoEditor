@@ -21,6 +21,9 @@ public:
     }
 
     const std::map<Id, MediaInfo>& items() const { return items_; }
+    void setOffline(Id id, bool offline) {
+        if (auto it = items_.find(id); it != items_.end()) it->second.offline = offline;
+    }
 
 private:
     std::map<Id, MediaInfo> items_;

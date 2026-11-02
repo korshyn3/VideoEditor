@@ -175,6 +175,15 @@ Project::Project() {
     timeline_.tracks = {v1, audioV1, a1};
 }
 
+const Track* Project::primeraPistaInvalida(Timeline& tl) {
+    return pistaInvalida(tl);
+}
+
+void Project::setMediaOffline(Id mediaId, bool offline) {
+    media_.setOffline(mediaId, offline);
+    ++revision_;  // el render cambia (negro/silencio), pero no hay nada que guardar
+}
+
 void Project::touch() {
     ++revision_;
     dirty_ = true;

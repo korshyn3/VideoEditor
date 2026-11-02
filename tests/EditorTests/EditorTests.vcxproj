@@ -84,6 +84,7 @@
     <ClCompile Include="TestExport.cpp" />
     <ClCompile Include="TestFFmpegError.cpp" />
     <ClCompile Include="TestMediaProbe.cpp" />
+    <ClCompile Include="TestPersistencia.cpp" />
     <ClCompile Include="TestPip.cpp" />
     <ClCompile Include="TestRender.cpp" />
     <ClCompile Include="TestSeleccion.cpp" />

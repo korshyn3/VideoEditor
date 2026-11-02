@@ -2,11 +2,14 @@
 // Capa: CONTROLLER. Ver EditorController.h.
 #include "EditorController/EditorController.h"
 #include "EditorEngine/EncoderCatalog.h"
+#include "EditorModel/ProjectSerializer.h"
 
 #include <algorithm>
 #include <cwctype>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <thread>
 
 namespace controller {
@@ -252,6 +255,72 @@ std::wstring rutaComparable(const std::string& utf8) {
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Proyecto (archivo JSON)
+// ---------------------------------------------------------------------------
+
+void EditorController::reiniciarEstado() {
+    seleccion_ = {};
+    if (const model::Track* v1 = project_.timeline().firstTrack(model::TrackKind::Video)) seleccion_.trackId = v1->id;
+    playhead_ = 0;
+    revisionEnPreview_ = UINT64_MAX;  // el preview recibe el proyecto nuevo
+    if (preview_) {
+        if (reproduciendo()) reproducirPausar();
+        preview_->seek(0);
+    }
+}
+
+model::OpResult EditorController::guardar(const std::string& rutaUtf8) {
+    std::ofstream archivo(rutaDesdeUtf8(rutaUtf8), std::ios::binary | std::ios::trunc);
+    if (!archivo) return model::OpResult::fallo("No se pudo crear el archivo \"" + rutaUtf8 + "\".");
+    archivo << model::ProjectSerializer::toJson(project_);
+    archivo.close();
+    if (!archivo) return model::OpResult::fallo("No se pudo escribir el archivo \"" + rutaUtf8 + "\".");
+    project_.markSaved();
+    rutaProyecto_ = rutaUtf8;
+    return model::OpResult::exito();
+}
+
+CargaResult EditorController::abrir(const std::string& rutaUtf8) {
+    CargaResult resultado;
+    if (exportando()) {
+        resultado.r = enExportacion();
+        return resultado;
+    }
+    std::ifstream archivo(rutaDesdeUtf8(rutaUtf8), std::ios::binary);
+    if (!archivo) {
+        resultado.r = model::OpResult::fallo("No se pudo abrir el archivo \"" + rutaUtf8 + "\".");
+        return resultado;
+    }
+    const std::string texto((std::istreambuf_iterator<char>(archivo)), std::istreambuf_iterator<char>());
+
+    // Primero un proyecto temporal: el actual solo se reemplaza si el archivo es válido.
+    model::Project cargado;
+    std::string error;
+    if (!model::ProjectSerializer::fromJson(texto, cargado, &error)) {
+        resultado.r = model::OpResult::fallo("No se pudo abrir el proyecto: " + error);
+        return resultado;
+    }
+    // Los medios se vuelven a analizar: los que no se pueden abrir quedan offline.
+    for (const auto& [id, info] : cargado.media().items()) {
+        const bool ok = engine::MediaProbe::probe(info.path).ok;
+        if (!ok) resultado.faltantes.push_back(info.path);
+        cargado.setMediaOffline(id, !ok);
+    }
+    project_ = std::move(cargado);
+    project_.markSaved();
+    rutaProyecto_ = rutaUtf8;
+    reiniciarEstado();
+    return resultado;
+}
+
+void EditorController::nuevoProyecto() {
+    if (exportando()) return;
+    project_ = model::Project();
+    rutaProyecto_.clear();
+    reiniciarEstado();
+}
 
 model::OpResult EditorController::enExportacion() {
     return model::OpResult::fallo("Hay una exportación en curso: espera a que termine o cancélala.");

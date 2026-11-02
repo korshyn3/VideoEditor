@@ -360,15 +360,32 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     auto clipVideo = [&](const model::Clip& c, long long a, long long n, long long finEntrada,
                          const std::string& etiqueta, bool superior) {
         const TimeUs iniClip = tiempoDeCuadro(a, fps);
-        const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(finEntrada, fps));
-        const TimeUs desde = std::max<TimeUs>(0, iniClip - c.timelineStart);
-        if (!superior) {
-            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desde) + "[" + etiqueta + "];\n";
+        // Un medio offline (no se encontró al abrir el proyecto) se ve en negro: todo el
+        // lienzo en V1, el recuadro del PiP en las pistas superiores.
+        const model::MediaInfo* info = snap.media.find(c.mediaId);
+        const bool offline = !info || info->offline;
+        if (offline && !superior) {
+            g += cadenaHuecoVideo(salida, n) + "[" + etiqueta + "];\n";
             return;
         }
         const long x = std::lround(c.transform.x * salida.width);
         const long y = std::lround(c.transform.y * salida.height);
-        g += "[" + in.label + "]" + cadenaVideoPip(salida, n, c, desde) + "[" + etiqueta + "p];\n";
+        if (offline) {
+            const int ancho = std::max(2, static_cast<int>(std::lround(c.transform.scale * salida.width)) & ~1);
+            const int alto = (info && info->width > 0)
+                                 ? std::max(2, static_cast<int>(static_cast<long long>(ancho) * info->height / info->width) & ~1)
+                                 : ancho;
+            g += "color=c=black:s=" + std::to_string(ancho) + "x" + std::to_string(alto) + ":r=" + racional(fps) +
+                 ",format=yuva420p,trim=end_frame=" + std::to_string(n) + "[" + etiqueta + "p];\n";
+        } else {
+            const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(finEntrada, fps));
+            const TimeUs desde = std::max<TimeUs>(0, iniClip - c.timelineStart);
+            if (!superior) {
+                g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desde) + "[" + etiqueta + "];\n";
+                return;
+            }
+            g += "[" + in.label + "]" + cadenaVideoPip(salida, n, c, desde) + "[" + etiqueta + "p];\n";
+        }
         g += cadenaHuecoTransparente(salida, n) + "[" + etiqueta + "b];\n";
         g += "[" + etiqueta + "b][" + etiqueta + "p]overlay=x=" + std::to_string(x) + ":y=" + std::to_string(y) +
              ":eof_action=pass[" + etiqueta + "];\n";
@@ -473,7 +490,7 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         // Audio de un clip desde `ini` (del timeline) durante `dur`, con sus fundidos.
         auto audioClip = [&](const model::Clip& c, TimeUs ini, TimeUs dur, const std::string& etiqueta) {
             const model::MediaInfo* info = snap.media.find(c.mediaId);
-            if (!info || !info->hasAudio) {
+            if (!info || !info->hasAudio || info->offline) {  // offline: silencio
                 cadena += cadenaSilencio(dur) + "[" + etiqueta + "];\n";
                 return;
             }

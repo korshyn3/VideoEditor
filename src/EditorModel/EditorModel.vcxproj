@@ -68,6 +68,7 @@
     <ClInclude Include="MediaPool.h" />
     <ClInclude Include="OpResult.h" />
     <ClInclude Include="Project.h" />
+    <ClInclude Include="ProjectSerializer.h" />
     <ClInclude Include="Tiempo.h" />
     <ClInclude Include="Timeline.h" />
     <ClInclude Include="Track.h" />
@@ -76,6 +77,7 @@
   <ItemGroup>
     <ClCompile Include="Effect.cpp" />
     <ClCompile Include="Project.cpp" />
+    <ClCompile Include="ProjectSerializer.cpp" />
     <ClCompile Include="Tiempo.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

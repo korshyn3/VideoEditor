@@ -37,6 +37,13 @@ struct Seleccion {
     bool multiple() const { return clips.size() > 1; }
 };
 
+// Resultado de abrir un proyecto: si se abrió, los archivos que no se encontraron (sus
+// clips quedan offline: se ven en el timeline y se renderizan en negro y en silencio).
+struct CargaResult {
+    model::OpResult r;
+    std::vector<std::string> faltantes;  // rutas UTF-8
+};
+
 // Resultado de importar varios archivos: los válidos se importan aunque otros fallen.
 struct ImportResult {
     std::vector<model::Id> clips;     // clips creados, en orden
@@ -125,6 +132,17 @@ public:
     // Mueve el cursor (y el preview, si está iniciado) a t, limitado a [0, duración].
     void setPlayhead(model::TimeUs t);
 
+    // ---- Proyecto (archivo JSON) ---------------------------------------------
+    // Ruta del archivo del proyecto actual (vacía si nunca se guardó).
+    const std::string& rutaProyecto() const { return rutaProyecto_; }
+    // Guarda el proyecto en la ruta dada (y la recuerda); deja de haber cambios pendientes.
+    model::OpResult guardar(const std::string& rutaUtf8);
+    // Abre un proyecto. Si el archivo no es válido, el proyecto actual no cambia. Los
+    // medios se vuelven a analizar: los que faltan quedan offline.
+    CargaResult abrir(const std::string& rutaUtf8);
+    // Proyecto nuevo y vacío.
+    void nuevoProyecto();
+
     // ---- Exportación ----------------------------------------------------------
     // Mientras se exporta, las acciones que modifican el proyecto se rechazan.
     // Resolución de salida según el preset (o la personalizada).
@@ -172,6 +190,9 @@ private:
     model::Project project_;
     Seleccion seleccion_;
     model::TimeUs playhead_ = 0;
+    // Deja el estado de edición como en un proyecto recién abierto.
+    void reiniciarEstado();
+    std::string rutaProyecto_;
     // Rechazo de las acciones que modifican el proyecto durante la exportación.
     static model::OpResult enExportacion();
     std::unique_ptr<engine::ExportJob> export_;         // la exportación (en curso o la última)
