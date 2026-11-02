@@ -22,6 +22,18 @@
 #define IDC_CLIP_IN                     1011
 #define IDC_CLIP_OUT                    1012
 #define IDC_CLIP_APLICAR                1013
+#define IDC_FX_TIPO                     1014
+#define IDC_FX_AGREGAR                  1015
+#define IDC_FX_LISTA                    1016
+#define IDC_FX_SUBIR                    1017
+#define IDC_FX_BAJAR                    1018
+#define IDC_FX_QUITAR                   1019
+#define IDC_FX_ETQ1                     1020
+#define IDC_FX_SLIDER1                  1021
+#define IDC_FX_VALOR1                   1022
+#define IDC_FX_ETQ2                     1023
+#define IDC_FX_SLIDER2                  1024
+#define IDC_FX_VALOR2                   1025
 #define ID_ARCHIVO_IMPORTAR             32771
 #define ID_ARCHIVO_SALIR                32772
 #define ID_PISTAS_AGREGAR_VIDEO         32773
@@ -40,7 +52,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        107
 #define _APS_NEXT_COMMAND_VALUE         32782
-#define _APS_NEXT_CONTROL_VALUE         1014
+#define _APS_NEXT_CONTROL_VALUE         1026
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

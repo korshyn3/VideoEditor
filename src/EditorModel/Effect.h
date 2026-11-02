@@ -13,7 +13,9 @@
 namespace model {
 
 // Elimina la saturación de color (blanco y negro).
-struct Grayscale {};
+struct Grayscale {
+    bool operator==(const Grayscale&) const = default;
+};
 
 // brightness: -1.0 .. 1.0 (0 = sin cambio); contrast: 0.0 .. 3.0 (1 = sin cambio).
 struct BrightnessContrast {
@@ -21,12 +23,14 @@ struct BrightnessContrast {
     static constexpr double kContrasteMin = 0.0, kContrasteMax = 3.0;
     double brightness = 0.0;
     double contrast = 1.0;
+    bool operator==(const BrightnessContrast&) const = default;
 };
 
 // radius: 0 .. 50 (0 = sin desenfoque).
 struct Blur {
     static constexpr double kRadioMax = 50.0;
     double radius = 5.0;
+    bool operator==(const Blur&) const = default;
 };
 
 // Fundido desde/hacia negro al inicio/fin del clip. La suma de los dos no puede superar
@@ -34,6 +38,7 @@ struct Blur {
 struct Fade {
     TimeUs fadeIn = kMicrosPorSegundo;
     TimeUs fadeOut = 0;
+    bool operator==(const Fade&) const = default;
 };
 
 using Effect = std::variant<Grayscale, BrightnessContrast, Blur, Fade>;

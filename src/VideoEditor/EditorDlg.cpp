@@ -110,13 +110,15 @@ BOOL CEditorDlg::OnInitDialog() {
 
 BOOL CEditorDlg::PreTranslateMessage(MSG* pMsg) {
     // Los atajos de teclado (Ctrl+I, Espacio...) se traducen antes de que los procese el
-    // control que tiene el foco. Excepción: en un cuadro de texto, las teclas sin Ctrl
-    // (como Espacio) son para escribir.
+    // control que tiene el foco. Excepción: en un cuadro de texto o en el panel de clip
+    // (lista de efectos, sliders), las teclas sin Ctrl (como Espacio o Supr) son para el
+    // control.
     bool enCuadroDeTexto = false;
     if (CWnd* foco = GetFocus()) {
         wchar_t clase[16] = {};
         ::GetClassNameW(foco->GetSafeHwnd(), clase, 16);
-        enCuadroDeTexto = _wcsicmp(clase, L"Edit") == 0 && !(::GetKeyState(VK_CONTROL) & 0x8000);
+        const bool sinCtrl = !(::GetKeyState(VK_CONTROL) & 0x8000);
+        enCuadroDeTexto = sinCtrl && (_wcsicmp(clase, L"Edit") == 0 || ::IsChild(m_panelClip.GetSafeHwnd(), foco->GetSafeHwnd()));
     }
     if (m_aceleradores && !enCuadroDeTexto && ::TranslateAccelerator(m_hWnd, m_aceleradores, pMsg)) return TRUE;
     return CDialogEx::PreTranslateMessage(pMsg);
@@ -375,6 +377,8 @@ void CEditorDlg::ActualizarPropiedades() {
     if (clip) {
         m_panelClip.MostrarClip(*clip, t);
         m_panelClip.HabilitarRecorte(!sel.multiple());
+        // Los efectos son de los clips de video, de a uno.
+        m_panelClip.HabilitarEfectos(pista->kind == model::TrackKind::Video && !sel.multiple());
         m_panelMedio.ShowWindow(SW_HIDE);
         m_panelClip.ShowWindow(SW_SHOW);
     } else {
