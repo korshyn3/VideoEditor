@@ -44,6 +44,55 @@ El usuario MUST poder arrastrar un clip a otra posición de la misma pista o a o
 - **WHEN** el usuario suelta un clip encima de otro clip de la misma pista
 - **THEN** el movimiento se rechaza y el clip conserva su posición original
 
+### Requirement: Selección múltiple
+El usuario MUST poder seleccionar varios clips a la vez, de cualquier pista: Ctrl+clic agrega un clip a la selección o lo quita, y un clic sin Ctrl deja seleccionado solo ese clip. Dividir y eliminar se aplican a todos los clips seleccionados; recortar y desvincular solo están disponibles con un único clip seleccionado. Si una acción no puede aplicarse a alguno de los clips, no se aplica a ninguno.
+
+#### Scenario: Seleccionar video y música
+- **WHEN** el usuario hace clic en un clip de V1 y Ctrl+clic en un clip de A1
+- **THEN** los dos clips quedan seleccionados
+
+#### Scenario: Dividir la selección
+- **WHEN** hay dos clips seleccionados, el cursor está dentro de uno de ellos y fuera del otro, y el usuario divide
+- **THEN** se divide solo el clip que está bajo el cursor
+
+#### Scenario: Eliminar la selección
+- **WHEN** hay tres clips seleccionados en distintas pistas y el usuario los elimina
+- **THEN** desaparecen los tres (y sus clips vinculados)
+
+#### Scenario: Recortar con varios clips seleccionados
+- **WHEN** hay más de un clip seleccionado
+- **THEN** recortar y desvincular no están disponibles
+
+### Requirement: Mover varios clips juntos
+Al arrastrar un clip que forma parte de una selección múltiple, el sistema MUST mover todos los clips seleccionados (y sus clips vinculados) el mismo tiempo, cada uno en su pista. Con varios clips seleccionados no se cambia de pista. Si alguno se solaparía con otro clip, el movimiento se rechaza y ninguno se mueve.
+
+#### Scenario: Mover la selección
+- **WHEN** el usuario selecciona un video en V1 y una música en A1 y arrastra uno de ellos 3 s a la derecha
+- **THEN** los dos (y el audio vinculado del video) quedan 3 s más tarde, cada uno en su pista
+
+#### Scenario: Movimiento de la selección con solapamiento
+- **WHEN** al mover la selección uno de los clips quedaría encima de otro clip
+- **THEN** el movimiento se rechaza y todos los clips conservan su posición
+
+### Requirement: Mover sobrescribiendo (Shift)
+Si el usuario mantiene Shift al soltar un movimiento (de uno o de varios clips), el sistema MUST sobrescribir: los clips que quedan debajo de los clips movidos se recortan para dejarles lugar. Un clip tapado por completo se elimina; si se tapa su inicio o su final, se recorta esa parte; si los clips movidos caen en su medio, se divide en dos y se quita la parte tapada. Si el clip de debajo está vinculado, su clip vinculado recibe el mismo corte.
+
+#### Scenario: Sobrescribir el final de un clip
+- **WHEN** A ocupa 0–10 s, el usuario arrastra B (5 s) con Shift hasta empezar en 8 s
+- **THEN** B queda en 8–13 s y A queda recortado a 0–8 s
+
+#### Scenario: Sobrescribir el medio de un clip
+- **WHEN** A ocupa 0–10 s y el usuario suelta con Shift un clip de 2 s en 4 s
+- **THEN** A queda dividido en 0–4 s y 6–10 s, con el clip movido en 4–6 s
+
+#### Scenario: Tapar un clip completo
+- **WHEN** el clip movido con Shift cubre por completo a otro clip de la pista
+- **THEN** el clip tapado se elimina
+
+#### Scenario: Sobrescribir un video con audio vinculado
+- **WHEN** el usuario suelta con Shift un clip sin audio sobre el tramo 4–6 s de un video con audio vinculado
+- **THEN** el video y su audio quedan los dos sin el tramo 4–6 s
+
 ### Requirement: Dividir clip en el cursor (split)
 El usuario MUST poder dividir el clip seleccionado en la posición del cursor de reproducción. Resultan dos clips contiguos que juntos cubren el mismo rango del medio fuente y conservan los efectos del original. Si el clip tiene un clip vinculado, también se divide. Si el cursor no está estrictamente dentro del clip, la operación no hace nada.
 
