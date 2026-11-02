@@ -94,6 +94,9 @@ public:
     model::OpResult moveEffect(model::Id clipId, size_t indice, int delta);
     model::OpResult removeEffect(model::Id clipId, size_t indice);
 
+    // Picture-in-picture de un clip de una pista superior (ver Project::setPipTransform).
+    model::OpResult setPipTransform(model::Id clipId, const model::PipTransform& transform);
+
     // Transiciones (ver Project::addTransition). Si `fromClipId` es un audio vinculado se
     // usa su video. Agregar deja seleccionada la transición nueva.
     // Duración por defecto de una transición nueva (limitada a lo que permiten los clips).

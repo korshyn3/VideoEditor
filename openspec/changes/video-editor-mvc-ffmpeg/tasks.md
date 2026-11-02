@@ -66,8 +66,8 @@
 
 ## 8. Fase 8 — Overlay picture-in-picture
 
-- [ ] 8.1 Implementar `PipTransform` con valores por defecto (0.65, 0.65, 0.3, 1.0) y límites en el modelo; verificar con un test que un clip nuevo en V2 tiene esos valores y que se limitan los valores fuera de rango
-- [ ] 8.2 Extender `FilterGraphBuilder` con la composición abajo→arriba (scale por fracción del lienzo, `format=yuva420p`, `colorchannelmixer=aa`, `overlay` con `eof_action=pass`, efectos/transiciones antes del overlay); verificar con un test de integración que un PiP que empieza en 3 s no congela el fondo antes de 3 s (riesgo de design) y con tests de cadena
+- [x] 8.1 Implementar `PipTransform` con valores por defecto (0.65, 0.65, 0.3, 1.0) y límites en el modelo; verificar con un test que un clip nuevo en V2 tiene esos valores y que se limitan los valores fuera de rango
+- [x] 8.2 Extender `FilterGraphBuilder` con la composición abajo→arriba (scale por fracción del lienzo, `format=yuva420p`, `colorchannelmixer=aa`, `overlay` con `eof_action=pass`, efectos/transiciones antes del overlay); verificar con un test de integración que un PiP que empieza en 3 s no congela el fondo antes de 3 s (riesgo de design) y con tests de cadena
 - [ ] 8.3 Añadir a `IDD_PROP_CLIP` una sección PiP (sliders de x, y, escala y opacidad, visible solo en pistas superiores a V1); verificar a mano "PiP por defecto", "Cambiar opacidad", "Cambiar posición y escala", "Clip parcialmente fuera", "Solo pista superior" y "Efecto en el PiP"
 
 ## 9. Fase 9 — Exportación

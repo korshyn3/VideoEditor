@@ -3,6 +3,7 @@
 #include "EditorEngine/FilterGraphBuilder.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 namespace engine {
@@ -165,6 +166,30 @@ std::string cadenaHuecoVideo(const RenderSettings& s, long long n) {
            ",format=yuv420p,setsar=1,trim=end_frame=" + std::to_string(n);
 }
 
+// Hueco de una pista superior: transparente (deja ver las pistas de abajo).
+std::string cadenaHuecoTransparente(const RenderSettings& s, long long n) {
+    return "color=c=black@0.0:s=" + std::to_string(s.width) + "x" + std::to_string(s.height) + ":r=" +
+           racional(s.fps) + ",format=yuva420p,setsar=1,trim=end_frame=" + std::to_string(n);
+}
+
+// Cadena de un clip de una pista superior (PiP): se escala a su fracción del ancho del
+// lienzo (conservando la relación de aspecto), se le aplican los efectos y se le agrega
+// el canal alfa con su opacidad. Después se coloca sobre un lienzo transparente con
+// overlay (que recorta lo que queda fuera).
+std::string cadenaVideoPip(const RenderSettings& s, long long n, const model::Clip& clip, TimeUs desdeInicioClip) {
+    const int ancho = std::max(2, static_cast<int>(std::lround(clip.transform.scale * s.width)) & ~1);
+    const std::string efectos = cadenaEfectos(clip);
+    const std::string inicio = (!efectos.empty() && desdeInicioClip > 0)
+                                   ? "setpts=PTS-STARTPTS+" + seg(desdeInicioClip) + "/TB,"
+                                   : "setpts=PTS-STARTPTS,";
+    std::string f = inicio + "scale=" + std::to_string(ancho) + ":-2,setsar=1,fps=" + racional(s.fps) +
+                    ",format=yuv420p," + efectos + "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" +
+                    std::to_string(n) + ",setpts=PTS-STARTPTS,format=yuva420p";
+    // (colorchannelmixer solo trabaja en RGB; lutyuv cambia el alfa sin convertir.)
+    if (clip.transform.opacity < 1.0) f += ",lutyuv=a='val*" + num(clip.transform.opacity) + "'";
+    return f;
+}
+
 // Estilo del modelo -> transición de xfade (design.md, D4).
 const char* estiloXfade(model::TransitionStyle e) {
     switch (e) {
@@ -239,9 +264,12 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     d.fin = (hasta < 0) ? duracion : std::clamp(hasta, d.t0 + 1, duracion);
     if (d.fin <= d.t0) d.fin = std::min(duracion, d.t0 + tiempoDeCuadro(1, fps));
 
-    // Pistas que se renderizan: V1 (las superiores se agregan en la fase 8) y todas las
-    // de audio no silenciadas (de video y generales; los clips de video no aportan audio,
-    // su audio es un clip vinculado).
+    // Pistas que se renderizan: todas las de video (V1 es el fondo y cada una de las
+    // siguientes se compone encima) y todas las de audio no silenciadas (de video y
+    // generales; los clips de video no aportan audio, su audio es un clip vinculado).
+    std::vector<const model::Track*> pistasVideo;
+    for (const model::Track& t : snap.timeline.tracks)
+        if (t.kind == model::TrackKind::Video) pistasVideo.push_back(&t);
     std::vector<const model::Track*> pistasAudioActivas;
     for (const model::Track& t : snap.timeline.tracks)
         if (t.kind == model::TrackKind::Audio && !t.muted) pistasAudioActivas.push_back(&t);
@@ -272,7 +300,7 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
                 }
             }
         };
-        retroceder(*v1, true);
+        for (const model::Track* t : pistasVideo) retroceder(*t, true);
         for (const model::Track* t : pistasAudioActivas) retroceder(*t, false);
         if (!cambio) break;
     }
@@ -296,22 +324,38 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         return in;
     };
 
-    // ---- Video: pista V1 ----
-    // Un segmento de video con la etiqueta dada: hueco negro, un clip, o una cadena de
-    // clips unidos con xfade. Cada clip de una cadena se renderiza hasta su final; la
-    // salida de xfade dura la + lb - D, y al final la cadena se corta a su rango.
-    auto segmentoVideo = [&](const Segmento& s, const std::string& etiqueta) {
+    // ---- Video: una pista por cada pista de video, compuestas de abajo hacia arriba ----
+    // Un clip de video de `n` cuadros desde el cuadro `a`, con la etiqueta dada. En V1
+    // ocupa todo el lienzo; en una pista superior es un PiP sobre un lienzo transparente.
+    auto clipVideo = [&](const model::Clip& c, long long a, long long n, long long finEntrada,
+                         const std::string& etiqueta, bool superior) {
+        const TimeUs iniClip = tiempoDeCuadro(a, fps);
+        const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(finEntrada, fps));
+        const TimeUs desde = std::max<TimeUs>(0, iniClip - c.timelineStart);
+        if (!superior) {
+            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desde) + "[" + etiqueta + "];\n";
+            return;
+        }
+        const long x = std::lround(c.transform.x * salida.width);
+        const long y = std::lround(c.transform.y * salida.height);
+        g += "[" + in.label + "]" + cadenaVideoPip(salida, n, c, desde) + "[" + etiqueta + "p];\n";
+        g += cadenaHuecoTransparente(salida, n) + "[" + etiqueta + "b];\n";
+        g += "[" + etiqueta + "b][" + etiqueta + "p]overlay=x=" + std::to_string(x) + ":y=" + std::to_string(y) +
+             ":eof_action=pass[" + etiqueta + "];\n";
+    };
+
+    // Un segmento de video con la etiqueta dada: hueco (negro en V1, transparente en las
+    // superiores), un clip, o una cadena de clips unidos con xfade. Cada clip de una
+    // cadena se renderiza hasta su final; la salida de xfade dura la + lb - D, y al final
+    // la cadena se corta a su rango.
+    auto segmentoVideo = [&](const Segmento& s, const std::string& etiqueta, bool superior) {
         const long long n = s.cuadroFin - s.cuadroIni;
         if (s.hueco()) {
-            g += cadenaHuecoVideo(salida, n) + "[" + etiqueta + "];\n";
+            g += (superior ? cadenaHuecoTransparente(salida, n) : cadenaHuecoVideo(salida, n)) + "[" + etiqueta + "];\n";
             return;
         }
         if (s.clips.size() == 1) {
-            const model::Clip& c = *s.clips[0];
-            const TimeUs iniSeg = tiempoDeCuadro(s.cuadroIni, fps);
-            const GraphInput in = nuevaEntrada(c, true, iniSeg, tiempoDeCuadro(s.cuadroFin, fps));
-            const TimeUs desdeInicioClip = std::max<TimeUs>(0, iniSeg - c.timelineStart);
-            g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desdeInicioClip) + "[" + etiqueta + "];\n";
+            clipVideo(*s.clips[0], s.cuadroIni, n, s.cuadroFin, etiqueta, superior);
             return;
         }
         std::string anterior;
@@ -321,11 +365,8 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
             const long long a = (k == 0) ? s.cuadroIni : cuadroRedondeado(c.timelineStart, fps);
             const long long b = cuadroRedondeado(c.timelineEnd(), fps);
             const long long nk = std::max(1LL, b - a);
-            const TimeUs iniClip = tiempoDeCuadro(a, fps);
-            const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(b, fps));
             const std::string clipEtq = etiqueta + "c" + std::to_string(k);
-            g += "[" + in.label + "]" + cadenaVideoClip(salida, nk, c, std::max<TimeUs>(0, iniClip - c.timelineStart)) +
-                 "[" + clipEtq + "];\n";
+            clipVideo(c, a, nk, b, clipEtq, superior);
             if (k == 0) {
                 anterior = clipEtq;
                 acumulado = nk;
@@ -346,20 +387,42 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
              ",setpts=PTS-STARTPTS[" + etiqueta + "];\n";
     };
 
-    const auto segsV1 = segmentar(*v1, tGrafo, d.fin, fps);
-    std::string concatV;
-    for (size_t i = 0; i < segsV1.size(); ++i) {
-        if (segsV1[i].cuadroFin - segsV1[i].cuadroIni <= 0) continue;
-        const std::string etiqueta = "v1s" + std::to_string(i);
-        segmentoVideo(segsV1[i], etiqueta);
-        concatV += "[" + etiqueta + "]";
+    // Cada pista es un concat de sus segmentos. Una pista superior sin clips en el rango
+    // no se agrega.
+    std::vector<std::string> pistasV;  // cadena "[s0][s1]concat..." de cada pista que se compone
+    for (size_t p = 0; p < pistasVideo.size(); ++p) {
+        const bool superior = p > 0;
+        const auto segs = segmentar(*pistasVideo[p], tGrafo, d.fin, fps);
+        if (superior && std::all_of(segs.begin(), segs.end(), [](const Segmento& x) { return x.hueco(); })) continue;
+        std::string concat;
+        int n = 0;
+        for (size_t i = 0; i < segs.size(); ++i) {
+            if (segs[i].cuadroFin - segs[i].cuadroIni <= 0) continue;
+            const std::string etiqueta = "v" + std::to_string(p + 1) + "s" + std::to_string(i);
+            segmentoVideo(segs[i], etiqueta, superior);
+            concat += "[" + etiqueta + "]";
+            ++n;
+        }
+        if (n == 0) {
+            if (!superior) return d;
+            continue;
+        }
+        pistasV.push_back(concat + (n > 1 ? "concat=n=" + std::to_string(n) + ":v=1:a=0" : ""));
     }
-    const size_t nV = std::count(concatV.begin(), concatV.end(), '[');
-    if (nV == 0) return d;
+
+    // Composición: V1 de fondo y cada pista superior encima con overlay. eof_action=pass:
+    // si una pista superior terminara antes, el fondo sigue (no se congela).
+    std::string video = pistasV[0];
+    for (size_t p = 1; p < pistasV.size(); ++p) {
+        const std::string fondo = "vc" + std::to_string(p - 1), arriba = "vt" + std::to_string(p);
+        g += video + (video.back() == ']' ? "null" : "") + "[" + fondo + "];\n";
+        g += pistasV[p] + (pistasV[p].back() == ']' ? "null" : "") + "[" + arriba + "];\n";
+        video = "[" + fondo + "][" + arriba + "]overlay=x=0:y=0:eof_action=pass,format=yuv420p";
+    }
     // Los pts de salida van en tiempo absoluto del timeline. round(): setpts trunca el
     // resultado, y 4.6 s / (1/25) da 114.999... Al descartar cuadros se numeran por
     // índice (N), que no depende de los pts que deja xfade.
-    g += concatV + (nV > 1 ? "concat=n=" + std::to_string(nV) + ":v=1:a=0," : "") +
+    g += video + (video.back() == ']' ? "" : ",") +
          (cuadrosDescartados > 0 ? "trim=start_frame=" + std::to_string(cuadrosDescartados) + ",setpts=round(N*" +
                                        std::to_string(fps.den) + "/" + std::to_string(fps.num) + "/TB+"
                                  : std::string("setpts=round(PTS-STARTPTS+")) +

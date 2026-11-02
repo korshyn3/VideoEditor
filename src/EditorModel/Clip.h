@@ -24,10 +24,12 @@ namespace model {
 // x, y: esquina superior izquierda relativa al lienzo (0..1); scale: fracción del ancho
 // del lienzo (0.05..1); opacity: 0..1.
 struct PipTransform {
+    static constexpr double kEscalaMin = 0.05;
     double x = 0.65;
     double y = 0.65;
     double scale = 0.3;
     double opacity = 1.0;
+    bool operator==(const PipTransform&) const = default;
 };
 
 struct Clip {

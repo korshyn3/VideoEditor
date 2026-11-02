@@ -83,6 +83,7 @@
     <ClCompile Include="TestEscalaTiempo.cpp" />
     <ClCompile Include="TestFFmpegError.cpp" />
     <ClCompile Include="TestMediaProbe.cpp" />
+    <ClCompile Include="TestPip.cpp" />
     <ClCompile Include="TestRender.cpp" />
     <ClCompile Include="TestSeleccion.cpp" />
     <ClCompile Include="TestTiempo.cpp" />

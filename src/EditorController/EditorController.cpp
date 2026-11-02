@@ -163,6 +163,10 @@ model::OpResult EditorController::removeEffect(model::Id clipId, size_t indice) 
     return project_.removeEffect(clipId, indice);
 }
 
+model::OpResult EditorController::setPipTransform(model::Id clipId, const model::PipTransform& transform) {
+    return project_.setPipTransform(clipId, transform);
+}
+
 model::Id EditorController::clipDeVideo(model::Id clipId) const {
     const model::Track* pista = nullptr;
     const model::Clip* c = project_.timeline().findClip(clipId, &pista);
