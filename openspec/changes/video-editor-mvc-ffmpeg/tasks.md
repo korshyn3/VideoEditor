@@ -72,9 +72,9 @@
 
 ## 9. Fase 9 — Exportación
 
-- [ ] 9.1 Implementar `EncoderCatalog` (prueba con `avcodec_open2` de h264_mf, hevc_mf, mpeg4, aac, aac_mf y compatibilidad con `avformat_query_codec` para mp4/mkv/mov); verificar con un test que al menos `mpeg4` + `aac` aparecen como válidos en los tres contenedores
-- [ ] 9.2 Implementar `ExportJob` en `std::jthread` (grafo con T=0 y resolución de salida con scale+pad, pix_fmt del encoder, bitrate de video/audio, encoding + mux, progreso atómico, cancelación con `stop_token`, borrado del parcial en fallo o cancelación); verificar con un test de integración que exporta 5 s a mkv/mpeg4/aac y `MediaProbe` reporta duración, resolución y streams esperados
-- [ ] 9.3 Implementar en el controller la validación de ruta de salida (rechazo si coincide con una fuente, confirmación antes de sobrescribir), resolución par entre 16 y 7680 y bloqueo de la edición durante la exportación; verificar con tests "Salida igual a una fuente" y "Resolución impar"
+- [x] 9.1 Implementar `EncoderCatalog` (prueba con `avcodec_open2` de h264_mf, hevc_mf, mpeg4, aac, aac_mf y compatibilidad con `avformat_query_codec` para mp4/mkv/mov); verificar con un test que al menos `mpeg4` + `aac` aparecen como válidos en los tres contenedores
+- [x] 9.2 Implementar `ExportJob` en `std::jthread` (grafo con T=0 y resolución de salida con scale+pad, pix_fmt del encoder, bitrate de video/audio, encoding + mux, progreso atómico, cancelación con `stop_token`, borrado del parcial en fallo o cancelación); verificar con un test de integración que exporta 5 s a mkv/mpeg4/aac y `MediaProbe` reporta duración, resolución y streams esperados
+- [x] 9.3 Implementar en el controller la validación de ruta de salida (rechazo si coincide con una fuente, confirmación antes de sobrescribir), resolución par entre 16 y 7680 y bloqueo de la edición durante la exportación; verificar con tests "Salida igual a una fuente" y "Resolución impar"
 - [ ] 9.4 Diseñar `IDD_EXPORTAR` (contenedor, códecs filtrados, bitrates con valores por defecto 5000/192 kbps, presets 480p/720p/1080p/personalizada, `CProgressCtrl` actualizado por `SetTimer`, Cancelar, aviso final por `WM_APP_EXPORT_DONE`); verificar a mano "Elegir mkv", "Preset 720p", "Progreso visible", "Cancelar", "Exportación terminada" y "Encoder falla al iniciar"
 - [ ] 9.5 Verificar `h264_mf` en el equipo de desarrollo exportando a mp4 con 2000 kbps y comprobar con `ffprobe.exe` que el bitrate medio es cercano y que la reproducción en un reproductor externo es correcta; documentar en el README la tolerancia observada
 

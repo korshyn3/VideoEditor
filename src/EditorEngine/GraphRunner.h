@@ -30,6 +30,9 @@ public:
     GraphRunner& operator=(const GraphRunner&) = delete;
 
     bool build(const GraphDescription& descripcion, std::string* error);
+    // Tamaño de los bloques de audio (llamar antes de build). La exportación usa el
+    // tamaño de cuadro del encoder (1024 en AAC).
+    void setTamanoBloqueAudio(int muestras) { bloqueAudio_ = muestras; }
 
     // Siguiente cuadro de video (yuv420p) / bloque de audio (float intercalado, estéreo,
     // 48 kHz, kMuestrasPorBloque muestras salvo el último). `pts` en tiempo del timeline.
@@ -56,6 +59,7 @@ private:
     std::vector<Entrada> entradas_;
     AVFrame* temporal_ = nullptr;
     std::string error_;
+    int bloqueAudio_ = kMuestrasPorBloque;
 };
 
 } // namespace engine

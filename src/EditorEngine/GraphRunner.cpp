@@ -106,7 +106,7 @@ bool GraphRunner::build(const GraphDescription& d, std::string* error) {
     if (r < 0) return fallar("No se pudo configurar el grafo de filtros: " + mensajeErrorFFmpeg(r));
 
     // El audio se entrega en bloques de tamaño fijo (cómodo para la salida de audio).
-    av_buffersink_set_frame_size(sinkAudio_, kMuestrasPorBloque);
+    av_buffersink_set_frame_size(sinkAudio_, bloqueAudio_);
     return true;
 }
 

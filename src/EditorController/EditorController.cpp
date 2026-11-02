@@ -1,8 +1,13 @@
 // EditorController.cpp
 // Capa: CONTROLLER. Ver EditorController.h.
 #include "EditorController/EditorController.h"
+#include "EditorEngine/EncoderCatalog.h"
 
 #include <algorithm>
+#include <cwctype>
+#include <chrono>
+#include <filesystem>
+#include <thread>
 
 namespace controller {
 
@@ -40,6 +45,10 @@ model::Id EditorController::pistaDestino(bool tieneVideo) {
 
 ImportResult EditorController::importFiles(const std::vector<std::string>& rutasUtf8) {
     ImportResult resultado;
+    if (exportando()) {
+        resultado.errores.push_back(enExportacion().error);
+        return resultado;
+    }
     for (const std::string& ruta : rutasUtf8) {
         engine::ProbeResult probe = engine::MediaProbe::probe(ruta);
         if (!probe.ok) {
@@ -59,6 +68,7 @@ ImportResult EditorController::importFiles(const std::vector<std::string>& rutas
 }
 
 model::OpResult EditorController::addTrack(model::TrackKind kind) {
+    if (exportando()) return enExportacion();
     model::Id nueva = model::kSinId;
     model::OpResult r = project_.addTrack(kind, &nueva);
     if (r.ok) seleccionarPista(nueva);
@@ -66,6 +76,7 @@ model::OpResult EditorController::addTrack(model::TrackKind kind) {
 }
 
 model::OpResult EditorController::removeTrack(model::Id trackId) {
+    if (exportando()) return enExportacion();
     model::OpResult r = project_.removeTrack(trackId);
     validarSeleccion();
     return r;
@@ -73,6 +84,7 @@ model::OpResult EditorController::removeTrack(model::Id trackId) {
 
 model::OpResult EditorController::moveClip(model::Id clipId, model::Id destTrackId, model::TimeUs newStart,
                                            bool sobrescribir) {
+    if (exportando()) return enExportacion();
     model::OpResult r = project_.moveClip(clipId, destTrackId, newStart, sobrescribir);
     if (r.ok) seleccionarClip(clipId);  // la pista seleccionada pasa a ser la del clip
     validarSeleccion();                 // (sobrescribir puede haber eliminado clips)
@@ -80,6 +92,7 @@ model::OpResult EditorController::moveClip(model::Id clipId, model::Id destTrack
 }
 
 model::OpResult EditorController::moverSeleccion(model::TimeUs delta, bool sobrescribir) {
+    if (exportando()) return enExportacion();
     if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
     model::OpResult r = project_.moveClips(seleccion_.clips, delta, sobrescribir);
     validarSeleccion();
@@ -87,6 +100,7 @@ model::OpResult EditorController::moverSeleccion(model::TimeUs delta, bool sobre
 }
 
 model::OpResult EditorController::splitAtPlayhead() {
+    if (exportando()) return enExportacion();
     if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
     const model::Project antes = project_;  // para deshacer si algo falla
     bool alguno = false;
@@ -107,12 +121,14 @@ model::OpResult EditorController::splitAtPlayhead() {
 }
 
 model::OpResult EditorController::trimClip(model::Id clipId, model::TimeUs newIn, model::TimeUs newOut) {
+    if (exportando()) return enExportacion();
     model::OpResult r = project_.trimClip(clipId, newIn, newOut);
     if (r.ok) seleccionarClip(clipId);
     return r;
 }
 
 model::OpResult EditorController::deleteSelectedClip(bool ripple) {
+    if (exportando()) return enExportacion();
     if (seleccion_.clips.empty()) return model::OpResult::fallo("No hay ningún clip seleccionado.");
     // De derecha a izquierda: así el ripple de un clip no corre a los que faltan borrar.
     std::vector<model::Id> ids = seleccion_.clips;
@@ -133,16 +149,19 @@ model::OpResult EditorController::deleteSelectedClip(bool ripple) {
 }
 
 model::OpResult EditorController::unlinkAudio() {
+    if (exportando()) return enExportacion();
     if (seleccion_.clipId == model::kSinId) return model::OpResult::fallo("No hay ningún clip seleccionado.");
     if (seleccion_.multiple()) return model::OpResult::fallo("Para desvincular, selecciona un solo clip.");
     return project_.unlinkAudio(seleccion_.clipId);
 }
 
 model::OpResult EditorController::setTrackMuted(model::Id trackId, bool muted) {
+    if (exportando()) return enExportacion();
     return project_.setTrackMuted(trackId, muted);
 }
 
 model::OpResult EditorController::addEffect(model::Id clipId, int tipo) {
+    if (exportando()) return enExportacion();
     model::Effect efecto = model::efectoPorDefecto(tipo);
     // Un fade nuevo dura 1 s, o lo que permita un clip más corto.
     if (auto* f = std::get_if<model::Fade>(&efecto)) {
@@ -152,18 +171,22 @@ model::OpResult EditorController::addEffect(model::Id clipId, int tipo) {
 }
 
 model::OpResult EditorController::setEffect(model::Id clipId, size_t indice, const model::Effect& efecto) {
+    if (exportando()) return enExportacion();
     return project_.setEffect(clipId, indice, efecto);
 }
 
 model::OpResult EditorController::moveEffect(model::Id clipId, size_t indice, int delta) {
+    if (exportando()) return enExportacion();
     return project_.moveEffect(clipId, indice, delta);
 }
 
 model::OpResult EditorController::removeEffect(model::Id clipId, size_t indice) {
+    if (exportando()) return enExportacion();
     return project_.removeEffect(clipId, indice);
 }
 
 model::OpResult EditorController::setPipTransform(model::Id clipId, const model::PipTransform& transform) {
+    if (exportando()) return enExportacion();
     return project_.setPipTransform(clipId, transform);
 }
 
@@ -176,6 +199,7 @@ model::Id EditorController::clipDeVideo(model::Id clipId) const {
 
 model::OpResult EditorController::addTransition(model::Id fromClipId, model::TransitionStyle estilo,
                                                 model::TimeUs duracion) {
+    if (exportando()) return enExportacion();
     fromClipId = clipDeVideo(fromClipId);
     // Si la duración pedida es la de por defecto y no cabe, se usa la máxima posible.
     if (duracion == kDuracionTransicion)
@@ -187,10 +211,12 @@ model::OpResult EditorController::addTransition(model::Id fromClipId, model::Tra
 
 model::OpResult EditorController::setTransition(model::Id fromClipId, model::TransitionStyle estilo,
                                                 model::TimeUs duracion) {
+    if (exportando()) return enExportacion();
     return project_.setTransition(clipDeVideo(fromClipId), estilo, duracion);
 }
 
 model::OpResult EditorController::removeSelectedTransition() {
+    if (exportando()) return enExportacion();
     if (seleccion_.transicion == model::kSinId) return model::OpResult::fallo("No hay ninguna transición seleccionada.");
     model::OpResult r = project_.removeTransition(seleccion_.transicion);
     if (r.ok) seleccion_.transicion = model::kSinId;
@@ -203,6 +229,111 @@ void EditorController::seleccionarTransicion(model::Id fromClipId) {
     limpiarSeleccionClip();
     seleccion_.transicion = fromClipId;
     seleccion_.trackId = pista->id;
+}
+
+// ---------------------------------------------------------------------------
+// Exportación
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::filesystem::path rutaDesdeUtf8(const std::string& utf8) {
+    return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+}
+
+// Forma comparable de una ruta: absoluta, normalizada y en minúsculas (en Windows las
+// rutas no distinguen mayúsculas).
+std::wstring rutaComparable(const std::string& utf8) {
+    std::error_code ec;
+    std::filesystem::path p = std::filesystem::weakly_canonical(std::filesystem::absolute(rutaDesdeUtf8(utf8), ec), ec);
+    std::wstring w = p.lexically_normal().wstring();
+    for (wchar_t& c : w) c = static_cast<wchar_t>(std::towlower(c));
+    return w;
+}
+
+} // namespace
+
+model::OpResult EditorController::enExportacion() {
+    return model::OpResult::fallo("Hay una exportación en curso: espera a que termine o cancélala.");
+}
+
+void EditorController::resolucionDe(const model::ExportSettings& s, int& width, int& height) {
+    switch (s.preset) {
+    case model::ResolutionPreset::P480: width = 854; height = 480; break;
+    case model::ResolutionPreset::P720: width = 1280; height = 720; break;
+    case model::ResolutionPreset::P1080: width = 1920; height = 1080; break;
+    default: width = s.width; height = s.height; break;
+    }
+}
+
+std::string EditorController::conExtension(const std::string& rutaUtf8, model::Container contenedor) {
+    if (rutaUtf8.empty()) return rutaUtf8;
+    std::filesystem::path p = rutaDesdeUtf8(rutaUtf8);
+    p.replace_extension(engine::EncoderCatalog::extension(contenedor));
+    const std::u8string u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+
+bool EditorController::salidaExiste(const std::string& rutaUtf8) {
+    std::error_code ec;
+    return std::filesystem::exists(rutaDesdeUtf8(rutaUtf8), ec);
+}
+
+model::OpResult EditorController::validarExportacion(const model::ExportSettings& s) const {
+    if (project_.timeline().empty()) return model::OpResult::fallo("El timeline está vacío: no hay nada que exportar.");
+    if (s.outputPath.empty()) return model::OpResult::fallo("Elige el archivo de salida.");
+    const std::wstring salida = rutaComparable(conExtension(s.outputPath, s.container));
+    for (const auto& [id, info] : project_.media().items())
+        if (rutaComparable(info.path) == salida)
+            return model::OpResult::fallo("El archivo de salida es uno de los archivos fuente del proyecto (\"" +
+                                          info.path + "\"). Elige otro nombre: los archivos fuente no se modifican.");
+    int w = 0, h = 0;
+    resolucionDe(s, w, h);
+    if (w < 16 || h < 16 || w > 7680 || h > 7680)
+        return model::OpResult::fallo("La resolución de salida debe estar entre 16 y 7680 píxeles.");
+    if (w % 2 != 0 || h % 2 != 0)
+        return model::OpResult::fallo("El ancho y el alto de la salida deben ser pares (por ejemplo " +
+                                      std::to_string(w & ~1) + "x" + std::to_string(h & ~1) + ").");
+    if (s.videoBitrateKbps < 100 || s.videoBitrateKbps > 100000)
+        return model::OpResult::fallo("El bitrate de video debe estar entre 100 y 100000 kbps.");
+    if (s.audioBitrateKbps < 32 || s.audioBitrateKbps > 512)
+        return model::OpResult::fallo("El bitrate de audio debe estar entre 32 y 512 kbps.");
+    if (!engine::EncoderCatalog::admite(s.container, s.videoCodec))
+        return model::OpResult::fallo("El códec de video \"" + s.videoCodec + "\" no está disponible para este contenedor.");
+    if (!engine::EncoderCatalog::admite(s.container, s.audioCodec))
+        return model::OpResult::fallo("El códec de audio \"" + s.audioCodec + "\" no está disponible para este contenedor.");
+    return model::OpResult::exito();
+}
+
+model::OpResult EditorController::startExport(const model::ExportSettings& s, std::function<void()> aviso) {
+    if (exportando()) return enExportacion();
+    model::ExportSettings config = s;
+    config.outputPath = conExtension(s.outputPath, s.container);
+    if (model::OpResult r = validarExportacion(config); !r) return r;
+    project_.setExportSettings(config);
+
+    engine::ExportRequest pedido;
+    pedido.snap = {project_.timeline(), project_.media(), project_.canvas()};
+    pedido.rutaSalida = config.outputPath;
+    pedido.contenedor = config.container;
+    pedido.encoderVideo = config.videoCodec;
+    pedido.encoderAudio = config.audioCodec;
+    pedido.videoKbps = config.videoBitrateKbps;
+    pedido.audioKbps = config.audioBitrateKbps;
+    resolucionDe(config, pedido.width, pedido.height);
+    // La reproducción se pausa: preview y exportación no compiten por la CPU.
+    if (reproduciendo()) reproducirPausar();
+    export_ = std::make_unique<engine::ExportJob>(std::move(aviso));
+    export_->start(std::move(pedido));
+    return model::OpResult::exito();
+}
+
+void EditorController::cancelExport() {
+    if (export_) export_->cancel();
+}
+
+void EditorController::esperarExport() {
+    while (exportando()) std::this_thread::sleep_for(std::chrono::milliseconds(20));
 }
 
 void EditorController::seleccionarPista(model::Id trackId) {

@@ -63,6 +63,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AudioOutput.h" />
+    <ClInclude Include="EncoderCatalog.h" />
+    <ClInclude Include="ExportJob.h" />
     <ClInclude Include="FFmpegError.h" />
     <ClInclude Include="FilterGraphBuilder.h" />
     <ClInclude Include="GraphRunner.h" />
@@ -73,6 +75,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AudioOutput.cpp" />
+    <ClCompile Include="EncoderCatalog.cpp" />
+    <ClCompile Include="ExportJob.cpp" />
     <ClCompile Include="FFmpegError.cpp" />
     <ClCompile Include="FilterGraphBuilder.cpp" />
     <ClCompile Include="GraphRunner.cpp" />

@@ -15,7 +15,9 @@ enum class ResolutionPreset { P480, P720, P1080, Custom };
 
 struct ExportSettings {
     Container container = Container::Mp4;
-    std::string videoCodec = "h264";  // nombre de códec ("h264", "hevc", "mpeg4")
+    // Nombres de ENCODER de FFmpeg ("h264_mf", "hevc_mf", "mpeg4"; "aac", "aac_mf"). Por
+    // defecto, los de software, que están siempre (el diálogo ofrece los disponibles).
+    std::string videoCodec = "mpeg4";
     std::string audioCodec = "aac";
     int videoBitrateKbps = 5000;      // 100 .. 100000
     int audioBitrateKbps = 192;       // 32 .. 512

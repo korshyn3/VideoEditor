@@ -64,6 +64,13 @@ public:
     static GraphDescription build(const TimelineSnapshot& snap, const RenderSettings& salida, model::TimeUs desde,
                                   model::TimeUs hasta = -1);
 
+    // Grafo de exportación: el timeline completo (desde 0) a `width` x `height`. El lienzo
+    // se escala conservando su relación de aspecto (con barras negras si hace falta) y las
+    // salidas se convierten a los formatos que pide el encoder ("yuv420p", "nv12"...;
+    // "fltp", "s16"...).
+    static GraphDescription buildExport(const TimelineSnapshot& snap, int width, int height,
+                                        const std::string& pixFmt, const std::string& sampleFmt);
+
     // Resolución del preview: la del lienzo reducida a un ancho máximo (dimensiones pares).
     static RenderSettings resolucionPreview(const model::CanvasSettings& canvas, int anchoMaximo);
 

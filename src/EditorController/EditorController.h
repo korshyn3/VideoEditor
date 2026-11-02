@@ -10,6 +10,7 @@
 // y qué clip están seleccionados y dónde está el cursor de reproducción.
 #pragma once
 
+#include "EditorEngine/ExportJob.h"
 #include "EditorEngine/MediaProbe.h"
 #include "EditorEngine/PlaybackEngine.h"
 #include "EditorModel/Project.h"
@@ -123,6 +124,27 @@ public:
     // Mueve el cursor (y el preview, si está iniciado) a t, limitado a [0, duración].
     void setPlayhead(model::TimeUs t);
 
+    // ---- Exportación ----------------------------------------------------------
+    // Mientras se exporta, las acciones que modifican el proyecto se rechazan.
+    // Resolución de salida según el preset (o la personalizada).
+    static void resolucionDe(const model::ExportSettings& s, int& width, int& height);
+    // La ruta con la extensión del contenedor (la reemplaza o la agrega).
+    static std::string conExtension(const std::string& rutaUtf8, model::Container contenedor);
+    // Valida la configuración: ruta no vacía y distinta de todos los archivos fuente,
+    // resolución par entre 16 y 7680, bitrates en rango y encoders disponibles para el
+    // contenedor. (Si el archivo ya existe lo pregunta la View, con salidaExiste.)
+    model::OpResult validarExportacion(const model::ExportSettings& s) const;
+    static bool salidaExiste(const std::string& rutaUtf8);
+    // Guarda la configuración en el proyecto y empieza a exportar en segundo plano.
+    // `aviso` se llama desde el hilo de exportación al terminar.
+    model::OpResult startExport(const model::ExportSettings& s, std::function<void()> aviso = {});
+    void cancelExport();
+    bool exportando() const { return export_ && export_->enCurso(); }
+    double progresoExport() const { return export_ ? export_->progreso() : 0.0; }
+    engine::ExportResult resultadoExport() const { return export_ ? export_->resultado() : engine::ExportResult{}; }
+    // Espera a que termine la exportación en curso (para los tests).
+    void esperarExport();
+
     // ---- Preview -------------------------------------------------------------
     // Crea el motor de reproducción (hilo de render). `aviso` se llama desde ese hilo
     // cuando hay novedades; la View lo usa para hacer PostMessage a su ventana.
@@ -147,6 +169,9 @@ private:
     model::Project project_;
     Seleccion seleccion_;
     model::TimeUs playhead_ = 0;
+    // Rechazo de las acciones que modifican el proyecto durante la exportación.
+    static model::OpResult enExportacion();
+    std::unique_ptr<engine::ExportJob> export_;         // la exportación (en curso o la última)
     std::unique_ptr<engine::PlaybackEngine> preview_;  // nullptr hasta iniciarPreview()
     std::uint64_t revisionEnPreview_ = UINT64_MAX;      // revisión enviada al preview
     bool seguiaReloj_ = false;                          // el cursor seguía al reloj del preview

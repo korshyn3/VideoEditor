@@ -248,6 +248,36 @@ RenderSettings FilterGraphBuilder::resolucionPreview(const model::CanvasSettings
     return r;
 }
 
+GraphDescription FilterGraphBuilder::buildExport(const TimelineSnapshot& snap, int width, int height,
+                                                 const std::string& pixFmt, const std::string& sampleFmt) {
+    // El lienzo "cabe" dentro de la salida: mismo aspecto, dimensiones pares.
+    const model::CanvasSettings& c = snap.canvas;
+    RenderSettings lienzo{width, height, c.fps};
+    if (static_cast<long long>(c.width) * height > static_cast<long long>(c.height) * width)
+        lienzo.height = static_cast<int>(static_cast<long long>(width) * c.height / c.width);
+    else
+        lienzo.width = static_cast<int>(static_cast<long long>(height) * c.width / c.height);
+    lienzo.width = std::max(2, lienzo.width & ~1);
+    lienzo.height = std::max(2, lienzo.height & ~1);
+
+    GraphDescription d = build(snap, lienzo, 0);
+    if (d.vacio) return d;
+    // Barras negras hasta la resolución pedida y el formato de píxel del encoder.
+    const std::string finVideo = "[vout];\n";
+    const size_t pv = d.filtros.rfind(finVideo);
+    if (pv != std::string::npos)
+        d.filtros.replace(pv, finVideo.size(),
+                          "[vlienzo];\n[vlienzo]pad=" + std::to_string(width) + ":" + std::to_string(height) +
+                              ":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=" + pixFmt + "[vout];\n");
+    const std::string finAudio = "aformat=sample_fmts=flt:sample_rates=48000:channel_layouts=stereo[aout]";
+    const size_t pa = d.filtros.rfind(finAudio);
+    if (pa != std::string::npos)
+        d.filtros.replace(pa, finAudio.size(),
+                          "aformat=sample_fmts=" + sampleFmt + ":sample_rates=48000:channel_layouts=stereo[aout]");
+    d.salida = {width, height, c.fps};
+    return d;
+}
+
 GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const RenderSettings& salida, TimeUs desde,
                                            TimeUs hasta) {
     GraphDescription d;
