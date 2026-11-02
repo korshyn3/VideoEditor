@@ -8,6 +8,8 @@
 #define IDD_PROP_MEDIO                  104
 #define IDD_PROP_CLIP                   105
 #define IDR_MENU_CONTEXTO_CLIP          106
+#define IDD_PROP_TRANSICION             107
+#define IDR_MENU_CONTEXTO_TRANSICION    108
 #define IDC_BTN_IMPORTAR                1000
 #define IDC_BTN_PLAY                    1001
 #define IDC_BTN_SPLIT                   1002
@@ -34,6 +36,12 @@
 #define IDC_FX_ETQ2                     1023
 #define IDC_FX_SLIDER2                  1024
 #define IDC_FX_VALOR2                   1025
+#define IDC_TR_ESTILO                   1026
+#define IDC_TR_DIRECCION                1027
+#define IDC_TR_DURACION                 1028
+#define IDC_TR_APLICAR                  1029
+#define IDC_TR_QUITAR                   1030
+#define IDC_TR_INFO                     1031
 #define ID_ARCHIVO_IMPORTAR             32771
 #define ID_ARCHIVO_SALIR                32772
 #define ID_PISTAS_AGREGAR_VIDEO         32773
@@ -45,14 +53,16 @@
 #define ID_EDITAR_ELIMINAR              32779
 #define ID_EDITAR_ELIMINAR_RIPPLE       32780
 #define ID_EDITAR_DESVINCULAR_AUDIO     32781
+#define ID_EDITAR_AGREGAR_TRANSICION    32782
+#define ID_EDITAR_QUITAR_TRANSICION     32783
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        107
-#define _APS_NEXT_COMMAND_VALUE         32782
-#define _APS_NEXT_CONTROL_VALUE         1026
+#define _APS_NEXT_RESOURCE_VALUE        109
+#define _APS_NEXT_COMMAND_VALUE         32784
+#define _APS_NEXT_CONTROL_VALUE         1032
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

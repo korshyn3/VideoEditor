@@ -65,6 +65,9 @@ BEGIN
         MENUITEM "Eliminar clip y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
         MENUITEM SEPARATOR
         MENUITEM "Des&vincular audio",          ID_EDITAR_DESVINCULAR_AUDIO
+        MENUITEM SEPARATOR
+        MENUITEM "Agregar &transición",         ID_EDITAR_AGREGAR_TRANSICION
+        MENUITEM "&Quitar transición",          ID_EDITAR_QUITAR_TRANSICION
     END
     POPUP "&Reproducción"
     BEGIN
@@ -93,6 +96,16 @@ BEGIN
         MENUITEM "Eliminar y cerrar el &hueco	Shift+Supr", ID_EDITAR_ELIMINAR_RIPPLE
         MENUITEM SEPARATOR
         MENUITEM "Des&vincular audio",          ID_EDITAR_DESVINCULAR_AUDIO
+        MENUITEM SEPARATOR
+        MENUITEM "Agregar &transición",         ID_EDITAR_AGREGAR_TRANSICION
+    END
+END
+
+IDR_MENU_CONTEXTO_TRANSICION MENU
+BEGIN
+    POPUP "Transición"
+    BEGIN
+        MENUITEM "&Quitar transición	Supr",   ID_EDITAR_QUITAR_TRANSICION
     END
 END
 
@@ -166,6 +179,21 @@ BEGIN
     EDITTEXT        IDC_CLIP_INFO,0,130,170,70,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
 END
 
+IDD_PROP_TRANSICION DIALOGEX 0, 0, 170, 200
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Estilo:",IDC_STATIC,0,2,45,8
+    COMBOBOX        IDC_TR_ESTILO,48,0,90,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Dirección:",IDC_STATIC,0,18,45,8
+    COMBOBOX        IDC_TR_DIRECCION,48,16,90,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Duración (s):",IDC_STATIC,0,34,45,8
+    EDITTEXT        IDC_TR_DURACION,48,32,60,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "Aplicar",IDC_TR_APLICAR,113,31,50,14
+    PUSHBUTTON      "Quitar transición",IDC_TR_QUITAR,0,50,80,14
+    EDITTEXT        IDC_TR_INFO,0,70,170,130,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -188,6 +216,10 @@ BEGIN
     END
 
     IDD_PROP_CLIP, DIALOG
+    BEGIN
+    END
+
+    IDD_PROP_TRANSICION, DIALOG
     BEGIN
     END
 END
@@ -234,6 +266,20 @@ BEGIN
     0, 0, 0, 0,
     0, 0, 0, 0,
     0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 100, 100
+END
+
+IDD_PROP_TRANSICION AFX_DIALOG_LAYOUT
+BEGIN
+    0,
     0, 0, 0, 0,
     0, 0, 0, 0,
     0, 0, 0, 0,

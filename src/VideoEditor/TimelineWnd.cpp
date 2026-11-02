@@ -143,6 +143,34 @@ const model::Clip* CTimelineWnd::ClipEn(CPoint p, int* filaOut) const {
     return nullptr;
 }
 
+CRect CTimelineWnd::RectTransicion(int fila, const model::Transition& tr) const {
+    const model::Track* pista = PistasVisuales()[fila];
+    const model::Clip* from = pista->findClip(tr.fromClipId);
+    const model::Clip* to = pista->findClip(tr.toClipId);
+    if (!from || !to) return CRect();
+    // Rombo en el centro del tramo en que se solapan los dos clips.
+    const int x = m_escala.tiempoAX((to->timelineStart + from->timelineEnd()) / 2);
+    const CRect f = RectFila(fila);
+    const int y = (f.top + f.bottom) / 2;
+    constexpr int r = 8;
+    return CRect(x - r, y - r, x + r + 1, y + r + 1);
+}
+
+model::Id CTimelineWnd::TransicionEn(CPoint p) const {
+    if (p.x < kAnchoCabecera) return model::kSinId;
+    const int fila = FilaEnY(p.y);
+    if (fila < 0) return model::kSinId;
+    for (const model::Transition& tr : PistasVisuales()[fila]->transitions)
+        if (RectTransicion(fila, tr).PtInRect(p)) return m_ctrl->clipDeVideo(tr.fromClipId);
+    return model::kSinId;
+}
+
+model::Id CTimelineWnd::ClipParaTransicion() const {
+    if (!m_ctrl) return model::kSinId;
+    const model::Id sel = m_ctrl->seleccion().clipId;
+    return (m_clipMenu == sel && m_fromMenu != model::kSinId) ? m_fromMenu : m_ctrl->clipDeVideo(sel);
+}
+
 const model::Clip* CTimelineWnd::BordeEn(CPoint p, bool* inicio) const {
     if (p.x < kAnchoCabecera) return nullptr;
     const int fila = FilaEnY(p.y);
@@ -266,6 +294,23 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
                                 : esVinculado      ? Resaltado::Vinculado
                                                    : Resaltado::Nada;
             DibujarClip(dc, rcClip, c, video, r, pista->muted);
+        }
+        // Rombos de las transiciones (el seleccionado, amarillo).
+        for (const model::Transition& tr : pista->transitions) {
+            const CRect rr = RectTransicion(i, tr);
+            if (rr.IsRectEmpty()) continue;
+            const bool trSel = sel.transicion != model::kSinId && m_ctrl->clipDeVideo(tr.fromClipId) == sel.transicion;
+            const POINT rombo[4] = {{rr.CenterPoint().x, rr.top},
+                                    {rr.right, rr.CenterPoint().y},
+                                    {rr.CenterPoint().x, rr.bottom},
+                                    {rr.left, rr.CenterPoint().y}};
+            CBrush relleno(trSel ? RGB(255, 215, 0) : RGB(235, 235, 235));
+            CPen borde(PS_SOLID, 1, RGB(20, 20, 20));
+            CBrush* brushViejo = dc.SelectObject(&relleno);
+            CPen* penViejo = dc.SelectObject(&borde);
+            dc.Polygon(rombo, 4);
+            dc.SelectObject(brushViejo);
+            dc.SelectObject(penViejo);
         }
         dc.RestoreDC(-1);
 
@@ -530,7 +575,14 @@ void CTimelineWnd::OnLButtonDown(UINT nFlags, CPoint point) {
         return;
     }
 
-    // 3) Borde de un clip: lo selecciona y prepara un posible trim.
+    // 3) Rombo de una transición: la selecciona.
+    if (const model::Id tr = TransicionEn(point); tr != model::kSinId) {
+        m_ctrl->seleccionarTransicion(tr);
+        NotificarCambio(false);
+        return;
+    }
+
+    // 4) Borde de un clip: lo selecciona y prepara un posible trim.
     bool bordeInicio = false;
     if (const model::Clip* clip = BordeEn(point, &bordeInicio)) {
         m_ctrl->seleccionarClip(clip->id);
@@ -543,7 +595,7 @@ void CTimelineWnd::OnLButtonDown(UINT nFlags, CPoint point) {
         return;
     }
 
-    // 4) Clip: Ctrl+clic lo agrega a la selección o lo quita. Un clic normal lo
+    // 5) Clip: Ctrl+clic lo agrega a la selección o lo quita. Un clic normal lo
     //    selecciona solo, salvo que ya forme parte de una selección múltiple: entonces se
     //    prepara el arrastre del grupo (y si no se arrastra, al soltar queda él solo).
     if (const model::Clip* clip = ClipEn(point, nullptr)) {
@@ -565,7 +617,7 @@ void CTimelineWnd::OnLButtonDown(UINT nFlags, CPoint point) {
         return;
     }
 
-    // 5) Zona vacía de una pista: selecciona la pista y mueve el cursor allí.
+    // 6) Zona vacía de una pista: selecciona la pista y mueve el cursor allí.
     m_ctrl->seleccionarPista(pista->id);
     MoverCursorA(point.x);
     NotificarCambio(false);
@@ -674,10 +726,37 @@ BOOL CTimelineWnd::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message) {
 void CTimelineWnd::OnRButtonDown(UINT /*nFlags*/, CPoint point) {
     SetFocus();
     if (!m_ctrl || m_arrastre != Arrastre::Nada) return;
-    const model::Clip* clip = ClipEn(point, nullptr);
+
+    // Sobre el rombo de una transición: la selecciona y ofrece quitarla.
+    if (const model::Id tr = TransicionEn(point); tr != model::kSinId) {
+        m_ctrl->seleccionarTransicion(tr);
+        NotificarCambio(false);
+        CMenu menu;
+        if (!menu.LoadMenu(IDR_MENU_CONTEXTO_TRANSICION)) return;
+        ClientToScreen(&point);
+        menu.GetSubMenu(0)->TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, point.x, point.y, GetParent());
+        return;
+    }
+
+    int fila = -1;
+    const model::Clip* clip = ClipEn(point, &fila);
     if (!clip) return;
     // Sobre un clip de la selección múltiple, el menú actúa sobre toda la selección.
     if (!m_ctrl->seleccion().contiene(clip->id)) m_ctrl->seleccionarClip(clip->id);
+
+    // "Agregar transición": en la mitad derecha del clip, con el siguiente; en la
+    // izquierda, del anterior a este.
+    m_clipMenu = clip->id;
+    m_fromMenu = m_ctrl->clipDeVideo(clip->id);
+    const model::Track* pistaVideo = nullptr;
+    const model::Clip* video = m_ctrl->project().timeline().findClip(m_fromMenu, &pistaVideo);
+    if (video && pistaVideo->kind == model::TrackKind::Video &&
+        m_escala.xATiempo(point.x) < video->timelineStart + video->duration() / 2) {
+        const model::Clip* anterior = nullptr;
+        for (const model::Clip& c : pistaVideo->clips)
+            if (c.timelineStart < video->timelineStart) anterior = &c;
+        m_fromMenu = anterior ? anterior->id : model::kSinId;
+    }
     NotificarCambio(false);
 
     // Menú contextual del .rc. Su dueño es la ventana padre: los comandos (Dividir,

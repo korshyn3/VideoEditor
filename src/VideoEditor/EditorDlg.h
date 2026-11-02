@@ -2,8 +2,8 @@
 // Capa: VIEW (MFC). Ventana principal del editor (diálogo IDD_EDITOR del .rc).
 //
 // Contiene la barra de botones, el preview (CPreviewWnd), el panel de propiedades (un
-// diálogo hijo: CPanelClipDlg si hay un clip seleccionado, CPanelMedioDlg si no) y el
-// timeline (CTimelineWnd). El diseño se edita en el Editor de
+// diálogo hijo: CPanelClipDlg si hay un clip seleccionado, CPanelTransicionDlg si hay una
+// transición seleccionada, CPanelMedioDlg si no) y el timeline (CTimelineWnd). El diseño se edita en el Editor de
 // recursos; el "diseño dinámico" (AFX_DIALOG_LAYOUT) reacomoda los controles al cambiar
 // el tamaño de la ventana.
 //
@@ -20,6 +20,7 @@
 #include "EditorController/EditorController.h"
 #include "PanelClipDlg.h"
 #include "PanelMedioDlg.h"
+#include "PanelTransicionDlg.h"
 #include "PreviewWnd.h"
 #include "TimelineWnd.h"
 
@@ -53,6 +54,8 @@ protected:
     afx_msg void OnEliminarClip();
     afx_msg void OnEliminarClipRipple();
     afx_msg void OnDesvincularAudio();
+    afx_msg void OnAgregarTransicion();
+    afx_msg void OnQuitarTransicion();
     afx_msg void OnAcercaDe();
     afx_msg LRESULT OnVistaCambio(WPARAM wParam, LPARAM lParam);
     DECLARE_MESSAGE_MAP()
@@ -81,5 +84,6 @@ private:
     CTimelineWnd m_timeline;
     CPanelMedioDlg m_panelMedio;
     CPanelClipDlg m_panelClip;
+    CPanelTransicionDlg m_panelTransicion;
     CSize m_tamanoMinimo;
 };

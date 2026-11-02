@@ -61,6 +61,8 @@ BEGIN_MESSAGE_MAP(CEditorDlg, CDialogEx)
     ON_COMMAND(ID_EDITAR_ELIMINAR_RIPPLE, &CEditorDlg::OnEliminarClipRipple)
     ON_BN_CLICKED(IDC_BTN_DESVINCULAR_AUDIO, &CEditorDlg::OnDesvincularAudio)
     ON_COMMAND(ID_EDITAR_DESVINCULAR_AUDIO, &CEditorDlg::OnDesvincularAudio)
+    ON_COMMAND(ID_EDITAR_AGREGAR_TRANSICION, &CEditorDlg::OnAgregarTransicion)
+    ON_COMMAND(ID_EDITAR_QUITAR_TRANSICION, &CEditorDlg::OnQuitarTransicion)
     ON_COMMAND(ID_AYUDA_ACERCA, &CEditorDlg::OnAcercaDe)
     ON_MESSAGE(WM_APP_VISTA_CAMBIO, &CEditorDlg::OnVistaCambio)
 END_MESSAGE_MAP()
@@ -89,6 +91,8 @@ BOOL CEditorDlg::OnInitDialog() {
     m_panelMedio.Create(IDD_PROP_MEDIO, this);
     m_panelClip.Create(IDD_PROP_CLIP, this);
     m_panelClip.SetController(&m_controller);
+    m_panelTransicion.Create(IDD_PROP_TRANSICION, this);
+    m_panelTransicion.SetController(&m_controller);
 
     // El tamaño de diseño es el mínimo: más chico, los controles se encimarían.
     CRect rc;
@@ -118,7 +122,9 @@ BOOL CEditorDlg::PreTranslateMessage(MSG* pMsg) {
         wchar_t clase[16] = {};
         ::GetClassNameW(foco->GetSafeHwnd(), clase, 16);
         const bool sinCtrl = !(::GetKeyState(VK_CONTROL) & 0x8000);
-        enCuadroDeTexto = sinCtrl && (_wcsicmp(clase, L"Edit") == 0 || ::IsChild(m_panelClip.GetSafeHwnd(), foco->GetSafeHwnd()));
+        enCuadroDeTexto = sinCtrl && (_wcsicmp(clase, L"Edit") == 0 ||
+                                      ::IsChild(m_panelClip.GetSafeHwnd(), foco->GetSafeHwnd()) ||
+                                      ::IsChild(m_panelTransicion.GetSafeHwnd(), foco->GetSafeHwnd()));
     }
     if (m_aceleradores && !enCuadroDeTexto && ::TranslateAccelerator(m_hWnd, m_aceleradores, pMsg)) return TRUE;
     return CDialogEx::PreTranslateMessage(pMsg);
@@ -154,13 +160,15 @@ void CEditorDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI) {
 
 void CEditorDlg::ColocarPanelPropiedades() {
     CWnd* grupo = GetDlgItem(IDC_GRUPO_PROPIEDADES);
-    if (!grupo || !m_panelMedio.GetSafeHwnd() || !m_panelClip.GetSafeHwnd()) return;
+    if (!grupo || !m_panelMedio.GetSafeHwnd() || !m_panelClip.GetSafeHwnd() || !m_panelTransicion.GetSafeHwnd())
+        return;
     CRect rc;
     grupo->GetWindowRect(&rc);
     ScreenToClient(&rc);
     rc.DeflateRect(8, 20, 8, 8);  // dejar visible el borde y el título del grupo
     m_panelMedio.SetWindowPos(&wndTop, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOACTIVATE);
     m_panelClip.SetWindowPos(&wndTop, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOACTIVATE);
+    m_panelTransicion.SetWindowPos(&wndTop, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOACTIVATE);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +231,11 @@ void CEditorDlg::OnDividir() {
 }
 
 void CEditorDlg::OnEliminarClip() {
+    // Con una transición seleccionada, Supr la quita.
+    if (m_controller.seleccion().transicion != model::kSinId) {
+        OnQuitarTransicion();
+        return;
+    }
     ResultadoSilencioso(m_controller.deleteSelectedClip(false));
 }
 
@@ -234,6 +247,20 @@ void CEditorDlg::OnDesvincularAudio() {
     // A diferencia de dividir, aquí el motivo del rechazo (clip sin audio vinculado) sí
     // se explica con un mensaje.
     MostrarResultado(m_controller.unlinkAudio());
+}
+
+void CEditorDlg::OnAgregarTransicion() {
+    const model::Id from = m_timeline.ClipParaTransicion();
+    if (from == model::kSinId) {
+        AfxMessageBox(L"Haz clic derecho cerca del borde entre dos clips seguidos de una pista de video.",
+                      MB_ICONINFORMATION);
+        return;
+    }
+    MostrarResultado(m_controller.addTransition(from));
+}
+
+void CEditorDlg::OnQuitarTransicion() {
+    MostrarResultado(m_controller.removeSelectedTransition());
 }
 
 void CEditorDlg::OnAcercaDe() {
@@ -372,6 +399,35 @@ void CEditorDlg::ActualizarPropiedades() {
     proyecto.Format(L"\r\nPROYECTO\r\nLienzo: %d x %d, %.3f fps\r\nDuración: %s\r\n", p.canvas().width,
                     p.canvas().height, p.canvas().fps.toDouble(), TextoTiempo(p.timeline().duration()).GetString());
     t += proyecto;
+
+    // Con una transición seleccionada, su panel (estilo, dirección, duración).
+    const model::Transition* tr = p.transitionFrom(sel.transicion);
+    if (tr) {
+        const model::Track* pistaTr = nullptr;
+        const model::Clip* from = p.timeline().findClip(tr->fromClipId, &pistaTr);
+        const model::Clip* to = p.timeline().findClip(tr->toClipId);
+        CString info;
+        if (from && to) {
+            info += L"TRANSICIÓN (pista " + CStringDesdeUtf8(pistaTr->name) + L")\r\n";
+            info += L"Tramo: " + TextoTiempo(to->timelineStart) + L" → " + TextoTiempo(from->timelineEnd()) + L"\r\n";
+            info += L"Duración máxima: " + TextoTiempo(p.maxTransitionDuration(tr->fromClipId)) + L"\r\n";
+            const model::MediaInfo* ma = p.media().find(from->mediaId);
+            const model::MediaInfo* mb = p.media().find(to->mediaId);
+            info += L"\r\nSale: " + (ma ? CStringDesdeUtf8(ma->path) : CString(L"?")) + L"\r\n";
+            info += L"Entra: " + (mb ? CStringDesdeUtf8(mb->path) : CString(L"?")) + L"\r\n";
+            // El audio se funde si los clips tienen audio vinculado.
+            info += (from->vinculado() && to->vinculado()) ? L"\r\nAudio: crossfade entre los dos clips.\r\n"
+                    : (from->vinculado() || to->vinculado())
+                        ? L"\r\nAudio: solo un clip tiene audio; se desvanece durante la transición.\r\n"
+                        : L"\r\nAudio: ninguno de los dos clips tiene audio vinculado.\r\n";
+        }
+        m_panelTransicion.MostrarTransicion(sel.transicion, *tr, info + proyecto);
+        m_panelMedio.ShowWindow(SW_HIDE);
+        m_panelClip.ShowWindow(SW_HIDE);
+        m_panelTransicion.ShowWindow(SW_SHOW);
+        return;
+    }
+    m_panelTransicion.ShowWindow(SW_HIDE);
 
     // Con un clip seleccionado se muestra el panel de clip (con entrada/salida editables).
     if (clip) {

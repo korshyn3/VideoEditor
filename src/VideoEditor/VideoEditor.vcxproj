@@ -83,6 +83,7 @@
     <ClInclude Include="MensajesApp.h" />
     <ClInclude Include="PanelClipDlg.h" />
     <ClInclude Include="PanelMedioDlg.h" />
+    <ClInclude Include="PanelTransicionDlg.h" />
     <ClInclude Include="PreviewWnd.h" />
     <ClInclude Include="TimelineWnd.h" />
     <ClInclude Include="Utf8.h" />
@@ -94,6 +95,7 @@
     <ClCompile Include="EscalaTiempo.cpp" />
     <ClCompile Include="PanelClipDlg.cpp" />
     <ClCompile Include="PanelMedioDlg.cpp" />
+    <ClCompile Include="PanelTransicionDlg.cpp" />
     <ClCompile Include="PreviewWnd.cpp" />
     <ClCompile Include="TimelineWnd.cpp" />
     <ClCompile Include="Utf8.cpp" />

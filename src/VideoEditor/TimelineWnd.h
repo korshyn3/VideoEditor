@@ -22,7 +22,13 @@
 //
 // Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
 // arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
-// un clip = menú contextual (dividir / eliminar), cuyos comandos llegan a la ventana padre.
+// un clip = menú contextual (dividir / eliminar / agregar transición), cuyos comandos
+// llegan a la ventana padre.
+//
+// Transiciones: dos clips con transición se dibujan solapados y en el centro del solape
+// hay un rombo; clic en el rombo = seleccionar la transición (se edita en el panel de
+// propiedades), clic derecho = menú para quitarla. La transición espejo de los audios
+// vinculados también lleva rombo y selecciona la misma transición.
 //
 // Regla MVC: lee el proyecto a través del controller (solo lectura) y pide los cambios
 // (seleccionar, mover clip, mover cursor) al controller. Después avisa a la ventana padre
@@ -51,6 +57,10 @@ public:
     void Refrescar();
     // Desplaza la vista si el cursor de reproducción salió del área visible.
     void SeguirCursor();
+    // Clip de salida para "Agregar transición": según dónde fue el último clic derecho
+    // sobre un clip (mitad derecha = con el siguiente, mitad izquierda = el anterior con
+    // él). Si ese clic no fue sobre el clip seleccionado, el clip seleccionado.
+    model::Id ClipParaTransicion() const;
 
 protected:
     afx_msg void OnPaint();
@@ -86,6 +96,11 @@ private:
     CRect RectMute(int fila) const;
     // Clip bajo el punto (o nullptr) y la fila en que está.
     const model::Clip* ClipEn(CPoint p, int* fila) const;
+    // Rombo de una transición de la pista en la fila (vacío si sus clips no están).
+    CRect RectTransicion(int fila, const model::Transition& tr) const;
+    // Transición cuyo rombo está bajo el punto: devuelve el clip de video del que sale
+    // (o kSinId).
+    model::Id TransicionEn(CPoint p) const;
     // Si el punto está sobre el borde izquierdo o derecho de un clip, devuelve ese clip y
     // en `inicio` qué borde es (true = izquierdo).
     const model::Clip* BordeEn(CPoint p, bool* inicio) const;
@@ -119,4 +134,8 @@ private:
     bool m_arrastreGrupo = false;  // se arrastra una selección múltiple
     model::TimeUs m_trimIn = 0;   // tramo propuesto durante un trim
     model::TimeUs m_trimOut = 0;
+
+    // Último clic derecho sobre un clip (para ClipParaTransicion).
+    model::Id m_clipMenu = model::kSinId;
+    model::Id m_fromMenu = model::kSinId;
 };
