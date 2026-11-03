@@ -111,13 +111,10 @@ public:
     OpResult moveEffect(Id clipId, size_t indice, int delta);
     OpResult removeEffect(Id clipId, size_t indice);
 
-    // ---- Picture-in-picture -------------------------------------------------
-    // Cambia la transformación de un clip de una pista de video superior a V1 (en V1 el
-    // clip ocupa todo el lienzo). Los valores fuera de rango se limitan: x, y y opacidad
-    // a 0..1, escala a 0.05..1.
+    // ---- Tamaño y posición (PiP) ---------------------------------------------
+    // Cambia la transformación de un clip de cualquier pista de video. Los valores fuera
+    // de rango se limitan: x, y y opacidad a 0..1, escala a 0.05..1.
     OpResult setPipTransform(Id clipId, PipTransform transform);
-    // true si la pista es de video y no es la de fondo (V1).
-    bool esPistaSuperior(Id trackId) const;
 
     // ---- Transiciones (entre clips consecutivos de una pista de video) ---------
     // Una transición se identifica por su clip de salida (`fromClipId`): cada clip tiene

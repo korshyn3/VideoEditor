@@ -20,6 +20,10 @@
 // mueve todo el grupo (cada clip en su pista). Soltar con Shift = sobrescribir: los clips
 // de debajo se recortan para dejar lugar.
 //
+// Pegado (imán): al mover o recortar, un clip a menos de EscalaTiempo::kImanPx píxeles del
+// borde de otro clip (o del 0) se pega a él y se dibuja una línea en ese punto. Su propia
+// pista tiene prioridad; si ahí no hay nada cerca, se alinea con las demás pistas.
+//
 // Con el mouse: clic en la regla = mover el cursor; arrastrar un clip = moverlo;
 // arrastrar el borde izquierdo o derecho de un clip = recortarlo (trim); clic derecho en
 // un clip = menú contextual (dividir / eliminar / agregar transición), cuyos comandos
@@ -42,6 +46,7 @@
 #include "EditorController/EditorController.h"
 #include "EscalaTiempo.h"
 
+#include <optional>
 #include <vector>
 
 class CTimelineWnd : public CWnd {
@@ -107,6 +112,12 @@ private:
     // Tramo propuesto [in, out) de la fuente al arrastrar un borde dx píxeles, limitado a
     // la fuente, a los clips vecinos y a un cuadro como mínimo.
     void CalcularTrim(int dx);
+    // Pista donde quedaría el clip vinculado de `clip` si este se suelta en `pistaDestino`.
+    model::Id PistaVinculadoEn(const model::Clip& clip, const model::Track& pistaClip, model::Id pistaDestino) const;
+    // Ajusta la posición propuesta del movimiento si queda cerca del borde de otro clip.
+    void AplicarIman();
+    // Tramos de todos los clips salvo `excluidos` (los que se están arrastrando).
+    std::vector<TramoIman> TramosFijos(const std::vector<model::Id>& excluidos) const;
 
     void Dibujar(CDC& dc, const CRect& rc);
     void DibujarRegla(CDC& dc, const CRect& rc);
@@ -134,6 +145,7 @@ private:
     bool m_arrastreGrupo = false;  // se arrastra una selección múltiple
     model::TimeUs m_trimIn = 0;   // tramo propuesto durante un trim
     model::TimeUs m_trimOut = 0;
+    std::optional<model::TimeUs> m_lineaIman;  // instante donde se pegó el arrastre en curso
 
     // Último clic derecho sobre un clip (para ClipParaTransicion).
     model::Id m_clipMenu = model::kSinId;

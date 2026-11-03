@@ -78,7 +78,7 @@ No se usa vcpkg: las dos bibliotecas que quedan (`nlohmann/json` y `doctest`) so
   - `Clip` tiene `{id, mediaId, sourceIn, sourceOut, timelineStart, linkedClipId, effects, transform}`. `linkedClipId` une un clip de video con su clip de audio (en los dos sentidos); `kSinId` = sin vínculo.
   - `Effect` es un `std::variant<Grayscale, BrightnessContrast, Blur, Fade>`.
   - `Transition` tiene `{fromClipId, toClipId, style, duration}`.
-  - `PipTransform` tiene `{x, y, scale, opacity}`.
+  - `PipTransform` tiene `{x, y, scale, opacity}` y vale para cualquier pista de video. Por defecto `{0, 0, 1, 1}`: el clip ocupa todo el lienzo. `scale` define un recuadro proporcional al lienzo y el clip se ajusta dentro con bandas transparentes, de modo que con escala 1 mide lo mismo que un clip de V1. En V1 sin transformación se usa la cadena directa, sin `overlay`.
 - **Invariantes**: los clips de una pista no se solapan, *salvo* que exista una transición entre ellos, y en ese caso se solapan exactamente `duration`. Siempre hay al menos una pista de video, y cada pista de video tiene exactamente una pista de audio de video. `sourceIn < sourceOut <= media.duration`. Dos clips vinculados tienen siempre el mismo `mediaId`, `sourceIn`, `sourceOut` y `timelineStart`, y el de audio está en la pista de audio de la pista de video del otro. Las operaciones (`split`, `trim`, `move`, `remove(ripple)`, `addTransition`, `unlinkAudio`...) son métodos que validan y devuelven `OpResult {bool ok; std::string error;}`. No se usa `std::expected` porque es de C++23.
 - **Operaciones sobre clips vinculados**: cada operación calcula el resultado para el clip y para su vinculado, valida los dos (solapes en las dos pistas) y solo entonces aplica ambos cambios; si alguno falla no cambia nada. Así el invariante de vínculo nunca se rompe a medias. Eliminar una pista desvincula los clips de otras pistas que estaban unidos a los suyos.
 - **Notificación de cambios**: cada mutación correcta incrementa `Project::revision`. El preview compara revisiones para saber que debe reconstruir. Se eligió en lugar de observers/señales porque es más simple de seguir: la View compara la revisión al recibir un mensaje o en su timer y redibuja si cambió.
@@ -87,7 +87,7 @@ No se usa vcpkg: las dos bibliotecas que quedan (`nlohmann/json` y `doctest`) so
 
 ### D5. Persistencia JSON
 
-`model/ProjectSerializer` usa nlohmann::json. Esta dependencia es aceptable en el modelo porque no es GUI ni FFmpeg. El formato lleva `"formatVersion": 1` y las rutas de medios en UTF-8 absolutas. Al cargar se valida todo antes de reemplazar el proyecto actual: se parsea a un `Project` temporal y solo se intercambia si es válido. Re-probar los medios (para detectar los offline) es tarea del controller, porque el modelo no conoce FFmpeg.
+`model/ProjectSerializer` usa nlohmann::json. Esta dependencia es aceptable en el modelo porque no es GUI ni FFmpeg. El formato lleva `"formatVersion": 2` y las rutas de medios en UTF-8 absolutas. Los archivos de la versión 1 se siguen abriendo: en ellos los clips de V1 guardaban una transformación que no se usaba, así que al cargarlos se restablece. Al cargar se valida todo antes de reemplazar el proyecto actual: se parsea a un `Project` temporal y solo se intercambia si es válido. Re-probar los medios (para detectar los offline) es tarea del controller, porque el modelo no conoce FFmpeg.
 
 ### D6. Engine: el grafo del timeline como texto (`FilterGraphBuilder`)
 
@@ -151,6 +151,7 @@ Se consideró y descartó un *compositor por cuadro* hecho a mano (decodificar c
 - `EditorController` (C++ estándar, sin MFC) expone acciones de alto nivel (`importFiles`, `splitAtPlayhead`, `trimClip`, `deleteClip(ripple)`, `unlinkAudio`, `addEffect`, `setTransition`, `setPipTransform`, `save/load`, `startExport`/`cancelExport`...). Cada una valida, llama al modelo y devuelve `OpResult`. **La View nunca modifica el modelo:** lo lee como `const` y llama al controller. Los handlers `OnBnClicked...` deben tener pocas líneas: convertir los datos del control y llamar al controller.
 - **Selección**: el controller guarda la pista seleccionada, la lista de clips seleccionados y el clip principal (el último que se seleccionó, que es el que muestra el panel de propiedades). Dividir y eliminar recorren toda la selección; como cada operación del modelo es atómica pero una acción múltiple encadena varias, el controller guarda una copia del `Project` antes de empezar y la restaura si alguna falla, así la acción entera es todo o nada.
 - **Mover y sobrescribir**: el modelo tiene una operación de movimiento de varios clips (`moveClips(ids, delta, sobrescribir)`) que trabaja sobre una copia del timeline: quita los clips que se mueven (y sus vinculados), con `sobrescribir` recorta en cada pista destino los clips que quedarían debajo (eliminar, recortar el inicio o el final, o dividir y quitar el medio, aplicando el mismo corte al clip vinculado), coloca los clips movidos y solo acepta el resultado si ninguna pista queda con solapes.
+- **Pegado (imán)**: es solo ayuda de la View al arrastrar: `buscarPegado` (junto a `EscalaTiempo`, sin MFC y con tests) ajusta la posición propuesta y el modelo recibe un movimiento normal. El umbral está en píxeles (`kImanPx`) y se convierte a tiempo con el zoom actual. Primero se busca en la pista propia y solo si no hay nada se alinea con las demás: así el pegado a otra pista no puede dejar el clip encima de un vecino propio.
 - **Ventana principal**: `CEditorDlg : CDialogEx` (como `CCambiarBMPDlg`), diseñada en el `.rc`:
   - Un menú `IDR_MENU_PRINCIPAL` (Archivo, Editar, Pistas, Ayuda) y una tabla de aceleradores (Espacio = play/pausa, S = split, Supr / Shift+Supr = eliminar, Ctrl+S = guardar), que se aplica en `PreTranslateMessage`.
   - Una barra de botones (Importar, Play/Pausa, Split, Desvincular audio, Exportar).
@@ -190,7 +191,7 @@ El proyecto MFC es Unicode (`CString` es UTF-16, como en CambiarBMP). El Model, 
 
 ## Migration Plan
 
-No aplica: es un proyecto nuevo, sin datos ni usuarios previos. El formato JSON nace con `formatVersion: 1` para permitir migraciones futuras.
+No aplica: es un proyecto nuevo, sin datos ni usuarios previos. El formato JSON nació con `formatVersion: 1` para permitir migraciones; la versión 2 es la primera (ver D5, transformación en V1).
 
 ## Open Questions
 

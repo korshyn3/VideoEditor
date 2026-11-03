@@ -15,12 +15,24 @@ El sistema MUST componer las pistas de video de abajo hacia arriba: la pista V1 
 - **WHEN** en un instante solo V2 tiene clip
 - **THEN** el clip de V2 se ve con su transformación sobre fondo negro
 
-### Requirement: Transformación de clips superpuestos
-Cada clip de una pista superior a V1 MUST tener posición (x, y relativas al lienzo, de 0.0 a 1.0, esquina superior izquierda del clip), escala (de 0.05 a 1.0, como fracción del ancho del lienzo y conservando la relación de aspecto) y opacidad (de 0.0 a 1.0). Por defecto: x=0.65, y=0.65, escala 0.3 y opacidad 1.0.
+### Requirement: Transformación de clips de video
+Cada clip de cualquier pista de video MUST tener posición (x, y relativas al lienzo, de 0.0 a 1.0, esquina superior izquierda del recuadro del clip), escala (de 0.05 a 1.0, como fracción del lienzo que ocupa el recuadro; dentro de él el clip conserva su relación de aspecto, centrado) y opacidad (de 0.0 a 1.0). Por defecto: x=0, y=0, escala 1.0 y opacidad 1.0, es decir, el mismo tamaño en todas las pistas. La transformación pertenece al clip: se conserva al moverlo de pista. En V1, lo que el clip no cubre se ve negro; en las pistas superiores, deja ver las de abajo.
 
 #### Scenario: PiP por defecto
-- **WHEN** el usuario coloca un clip en V2
-- **THEN** se ve en la esquina inferior derecha ocupando el 30 % del ancho del lienzo, totalmente opaco
+- **WHEN** el usuario coloca en V2 un clip que nunca cambió de tamaño
+- **THEN** se ve del mismo tamaño que en V1, totalmente opaco
+
+#### Scenario: Mover de pista conserva el tamaño
+- **WHEN** el usuario reduce un clip a escala 0.5 en V1 y lo mueve a V2
+- **THEN** el clip sigue con escala 0.5 y en la misma posición
+
+#### Scenario: Cambiar el tamaño en V1
+- **WHEN** el usuario fija escala 0.5 a un clip de V1
+- **THEN** el clip se ve a la mitad del lienzo y el resto de la imagen es negro
+
+#### Scenario: Clip de otra relación de aspecto
+- **WHEN** un clip 4:3 sin transformar está en V2 sobre un lienzo 16:9
+- **THEN** se ve completo y centrado, igual que en V1, y por las bandas laterales se ve lo que hay en V1
 
 #### Scenario: Cambiar opacidad
 - **WHEN** el usuario fija opacidad 0.5 al clip de V2

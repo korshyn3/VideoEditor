@@ -93,6 +93,33 @@ Si el usuario mantiene Shift al soltar un movimiento (de uno o de varios clips),
 - **WHEN** el usuario suelta con Shift un clip sin audio sobre el tramo 4–6 s de un video con audio vinculado
 - **THEN** el video y su audio quedan los dos sin el tramo 4–6 s
 
+### Requirement: Pegado de clips según el zoom
+Al mover un clip (o una selección) o al recortar uno de sus bordes con el mouse, si un borde queda cerca del borde de otro clip o del inicio del timeline, el sistema MUST pegarlo a ese punto y marcarlo con una línea vertical durante el arrastre. La cercanía se mide en píxeles de pantalla (8 px), de modo que en tiempo depende del zoom. Tienen prioridad las pistas en las que quedarían los clips movidos y sus clips vinculados; solo si ahí no hay ningún punto cerca, se alinea con los clips de las demás pistas.
+
+#### Scenario: Pegar con poco zoom
+- **WHEN** el zoom es de 50 px/s, A termina en 5 s y el usuario arrastra B hasta empezar en 5.1 s (a 5 px)
+- **THEN** B queda empezando exactamente en 5 s
+
+#### Scenario: No pegar con mucho zoom
+- **WHEN** el zoom es de 200 px/s, A termina en 5 s y el usuario arrastra B hasta empezar en 5.1 s (a 20 px)
+- **THEN** B queda empezando en 5.1 s
+
+#### Scenario: Alinear con otra pista
+- **WHEN** un video de V1 empieza en 5 s, A1 no tiene clips cerca y el usuario arrastra música a menos de 8 px de los 5 s
+- **THEN** la música queda empezando exactamente en 5 s
+
+#### Scenario: La pista propia tiene prioridad
+- **WHEN** A termina en 5 s en V1, un clip de V2 empieza en 5.2 s y el usuario arrastra B por V1 a menos de 8 px de los dos puntos
+- **THEN** B queda pegado a A aunque el borde de V2 esté más cerca, y no queda encima de A
+
+#### Scenario: Pegar al recortar
+- **WHEN** el usuario arrastra el borde derecho de un clip a menos de 8 px del inicio del clip siguiente y la fuente alcanza
+- **THEN** el clip queda terminando exactamente donde empieza el siguiente
+
+#### Scenario: Pegar al inicio del timeline
+- **WHEN** el usuario arrastra un clip a menos de 8 px del instante 0
+- **THEN** el clip queda empezando en 0
+
 ### Requirement: Dividir clip en el cursor (split)
 El usuario MUST poder dividir el clip seleccionado en la posición del cursor de reproducción. Resultan dos clips contiguos que juntos cubren el mismo rango del medio fuente y conservan los efectos del original. Si el clip tiene un clip vinculado, también se divide. Si el cursor no está estrictamente dentro del clip, la operación no hace nada.
 

@@ -103,7 +103,7 @@ public:
     model::OpResult moveEffect(model::Id clipId, size_t indice, int delta);
     model::OpResult removeEffect(model::Id clipId, size_t indice);
 
-    // Picture-in-picture de un clip de una pista superior (ver Project::setPipTransform).
+    // Tamaño, posición y opacidad de un clip de video (ver Project::setPipTransform).
     model::OpResult setPipTransform(model::Id clipId, const model::PipTransform& transform);
 
     // Transiciones (ver Project::addTransition). Si `fromClipId` es un audio vinculado se

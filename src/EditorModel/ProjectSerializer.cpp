@@ -169,7 +169,7 @@ bool ProjectSerializer::fromJson(const std::string& texto, Project& salida, std:
         }
         if (!j.is_object()) fallar("El archivo no contiene un proyecto.");
         const int version = leer<int>(j, "formatVersion", "el proyecto");
-        if (version != kFormatVersion)
+        if (version != 1 && version != kFormatVersion)
             fallar("Versión de formato no soportada: " + std::to_string(version) + " (se esperaba " +
                    std::to_string(kFormatVersion) + ").");
 
@@ -272,6 +272,13 @@ bool ProjectSerializer::fromJson(const std::string& texto, Project& salida, std:
         // Pistas: al menos una de video, y cada una con exactamente una pista de audio.
         const Timeline& tl = p.timeline_;
         if (tl.countTracks(TrackKind::Video) == 0) fallar("El proyecto no tiene ninguna pista de video.");
+        if (version == 1) {
+            for (Track& t : p.timeline_.tracks) {
+                if (t.kind != TrackKind::Video) continue;
+                for (Clip& c : t.clips) c.transform = PipTransform{};
+                break;  // solo V1, la primera de video
+            }
+        }
         for (const Track& t : tl.tracks) {
             if (t.kind == TrackKind::Video) {
                 int deVideo = 0;

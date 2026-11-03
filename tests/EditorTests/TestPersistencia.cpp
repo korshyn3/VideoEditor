@@ -92,7 +92,7 @@ void escribir(const std::string& rutaUtf8, const std::string& texto) {
 TEST_CASE("Guardar") {
     const Project p = proyectoCompleto();
     const std::string j = ProjectSerializer::toJson(p);
-    CHECK(contiene(j, "\"formatVersion\": 1"));
+    CHECK(contiene(j, "\"formatVersion\": 2"));
     CHECK(contiene(j, "\"canvas\""));
     CHECK(contiene(j, "C:/medios/A.mp4"));
     CHECK(contiene(j, "\"style\": \"circle\""));
@@ -165,12 +165,36 @@ TEST_CASE("Archivos de proyecto inválidos") {
         t.replace(pos, de.size(), a);
         return t;
     };
-    CHECK(rechaza(reemplazar("\"formatVersion\": 1", "\"formatVersion\": 7")));  // versión no soportada
-    CHECK(rechaza(reemplazar("\"formatVersion\": 1,", "")));                     // falta un campo
+    CHECK(rechaza(reemplazar("\"formatVersion\": 2", "\"formatVersion\": 7")));  // versión no soportada
+    CHECK(rechaza(reemplazar("\"formatVersion\": 2,", "")));                     // falta un campo
     CHECK(rechaza(reemplazar("\"type\": \"grayscale\"", "\"type\": \"sepia\"")));
     CHECK(rechaza(reemplazar("\"style\": \"circle\"", "\"style\": \"estrella\"")));
     CHECK(rechaza("[1, 2, 3]"));
     CHECK(rechaza(""));
+}
+
+TEST_CASE("Abrir un proyecto de la versión 1: los clips de V1 ocupan todo el lienzo") {
+    Project p;
+    Id v2 = kSinId, a = kSinId, b = kSinId;
+    p.addTrack(TrackKind::Video, &v2);
+    p.appendMedia(p.timeline().firstTrack(TrackKind::Video)->id, p.addMedia(videoFalso("A.mp4", 5)), &a);
+    p.appendMedia(v2, p.addMedia(videoFalso("B.mp4", 5)), &b);
+    // Lo que guardaba la versión 1: el mismo valor en V1 (sin usar) y en V2 (en uso).
+    const PipTransform antiguo{0.65, 0.65, 0.3, 1.0};
+    REQUIRE(p.setPipTransform(a, antiguo));
+    REQUIRE(p.setPipTransform(b, antiguo));
+
+    std::string texto = ProjectSerializer::toJson(p);
+    const std::string actual = "\"formatVersion\": 2";
+    const auto pos = texto.find(actual);
+    REQUIRE(pos != std::string::npos);
+    texto.replace(pos, actual.size(), "\"formatVersion\": 1");
+
+    Project cargado;
+    std::string error;
+    REQUIRE_MESSAGE(ProjectSerializer::fromJson(texto, cargado, &error), error);
+    CHECK(cargado.timeline().findClip(a)->transform == PipTransform{});
+    CHECK(cargado.timeline().findClip(b)->transform == antiguo);
 }
 
 TEST_CASE("Vínculos o transiciones incoherentes se rechazan") {

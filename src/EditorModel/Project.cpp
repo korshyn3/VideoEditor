@@ -829,18 +829,11 @@ OpResult Project::removeTransition(Id fromClipId) {
     return OpResult::exito();
 }
 
-bool Project::esPistaSuperior(Id trackId) const {
-    const Track* t = timeline_.findTrack(trackId);
-    const Track* v1 = timeline_.firstTrack(TrackKind::Video);
-    return t && v1 && t->kind == TrackKind::Video && t->id != v1->id;
-}
-
 OpResult Project::setPipTransform(Id clipId, PipTransform transform) {
     Track* pista = nullptr;
     Clip* clip = findClipMut(clipId, &pista);
     if (!clip) return OpResult::fallo("El clip no existe.");
-    if (!esPistaSuperior(pista->id))
-        return OpResult::fallo("Solo los clips de las pistas de video superiores a V1 se superponen (PiP).");
+    if (pista->kind != TrackKind::Video) return OpResult::fallo("Solo los clips de video tienen tamaño y posición.");
     transform.x = std::clamp(transform.x, 0.0, 1.0);
     transform.y = std::clamp(transform.y, 0.0, 1.0);
     transform.scale = std::clamp(transform.scale, PipTransform::kEscalaMin, 1.0);

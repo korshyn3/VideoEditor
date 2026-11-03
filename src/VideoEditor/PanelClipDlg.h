@@ -38,7 +38,7 @@ public:
     void HabilitarRecorte(bool habilitar);
     // Los efectos solo están disponibles para un clip de video.
     void HabilitarEfectos(bool habilitar);
-    // La sección PiP solo se ve con un clip de una pista superior a V1.
+    // La sección PiP solo se ve con un clip de video (de cualquier pista).
     void MostrarSeccionPip(bool mostrar);
 
     // Un parámetro editable de un efecto (para el slider y el cuadro de texto).

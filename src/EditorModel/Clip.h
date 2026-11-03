@@ -20,14 +20,15 @@
 
 namespace model {
 
-// Transformación de un clip superpuesto (picture-in-picture) en pistas superiores a V1.
-// x, y: esquina superior izquierda relativa al lienzo (0..1); scale: fracción del ancho
-// del lienzo (0.05..1); opacity: 0..1.
+// Transformación de un clip de video, en cualquier pista de video. x, y: esquina superior
+// izquierda relativa al lienzo (0..1); scale: fracción del lienzo que ocupa el recuadro del
+// clip (0.05..1; dentro del recuadro el clip conserva su relación de aspecto, centrado);
+// opacity: 0..1. Por defecto el clip ocupa todo el lienzo.
 struct PipTransform {
     static constexpr double kEscalaMin = 0.05;
-    double x = 0.65;
-    double y = 0.65;
-    double scale = 0.3;
+    double x = 0.0;
+    double y = 0.0;
+    double scale = 1.0;
     double opacity = 1.0;
     bool operator==(const PipTransform&) const = default;
 };

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 void EscalaTiempo::setPxPorSegundo(double pps) {
     pxPorSegundo_ = std::clamp(pps, kZoomMinimo, kZoomMaximo);
@@ -32,4 +33,41 @@ void EscalaTiempo::zoomAlrededorDe(int x, double factor) {
 
 int EscalaTiempo::anchoContenido(model::TimeUs duracion) const {
     return static_cast<int>(std::lround(model::tiempoASegundos(duracion) * pxPorSegundo_));
+}
+
+std::optional<PegadoIman> buscarPegado(const std::vector<TramoIman>& moviles, const std::vector<TramoIman>& fijos,
+                                       model::TimeUs delta, model::TimeUs umbral) {
+    if (moviles.empty()) return std::nullopt;
+    model::TimeUs inicioMinimo = moviles.front().inicio;
+    for (const TramoIman& m : moviles) inicioMinimo = std::min(inicioMinimo, m.inicio);
+
+    std::optional<PegadoIman> mejor;
+    model::TimeUs mejorDistancia = umbral;
+    auto probar = [&](model::TimeUs candidato, model::TimeUs punto) {
+        if (inicioMinimo + candidato < 0) return;
+        const model::TimeUs distancia = std::llabs(candidato - delta);
+        if (distancia > mejorDistancia || (mejor && distancia == mejorDistancia)) return;
+        mejorDistancia = distancia;
+        mejor = PegadoIman{candidato, punto};
+    };
+    for (const TramoIman& m : moviles) {
+        probar(-m.inicio, 0);
+        for (const TramoIman& f : fijos) {
+            if (f.pista != m.pista) continue;
+            probar(f.fin - m.inicio, f.fin);
+            probar(f.inicio - m.fin, f.inicio);
+        }
+    }
+    if (mejor) return mejor;
+
+    for (const TramoIman& m : moviles) {
+        for (const TramoIman& f : fijos) {
+            if (f.pista == m.pista) continue;
+            probar(f.inicio - m.inicio, f.inicio);
+            probar(f.fin - m.inicio, f.fin);
+            probar(f.inicio - m.fin, f.inicio);
+            probar(f.fin - m.fin, f.fin);
+        }
+    }
+    return mejor;
 }

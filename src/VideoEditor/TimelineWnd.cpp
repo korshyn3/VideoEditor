@@ -14,6 +14,7 @@ namespace {
 
 // Paleta de colores del timeline.
 const COLORREF kFondo = RGB(40, 40, 44);
+const COLORREF kImanLinea = RGB(255, 220, 0);
 const COLORREF kFondoFila = RGB(50, 50, 55);
 const COLORREF kFondoFilaSel = RGB(62, 62, 70);
 const COLORREF kCabecera = RGB(60, 60, 66);
@@ -201,7 +202,7 @@ void CTimelineWnd::CalcularTrim(int dx) {
     const model::MediaInfo* info = proyecto.media().find(clip->mediaId);
     const model::TimeUs duracionFuente = info ? info->duration : clip->sourceOut;
     const model::TimeUs cuadro = proyecto.frameDuration();
-    const model::TimeUs delta = m_escala.pxADuracion(dx);
+    model::TimeUs delta = m_escala.pxADuracion(dx);
 
     // Vecinos en la pista del clip y en la de su clip vinculado (que recibe el mismo
     // recorte): fin del anterior e inicio del siguiente.
@@ -218,6 +219,17 @@ void CTimelineWnd::CalcularTrim(int dx) {
         }
     }
 
+    // Pegado: el borde arrastrado es un tramo sin ancho en la pista del clip y en la de su
+    // vinculado. Los límites de abajo siguen impidiendo pisar a un vecino.
+    const model::TimeUs bordeActual = m_arrastre == Arrastre::BordeInicio ? clip->timelineStart : clip->timelineEnd();
+    std::vector<TramoIman> moviles{{pista->id, bordeActual, bordeActual}};
+    if (pistaVinculado) moviles.push_back({pistaVinculado->id, bordeActual, bordeActual});
+    m_lineaIman.reset();
+    if (const auto pegado = buscarPegado(moviles, TramosFijos({clip->id, clip->linkedClipId}), delta, m_escala.umbralIman())) {
+        delta = pegado->delta;
+        m_lineaIman = pegado->punto;
+    }
+
     m_trimIn = clip->sourceIn;
     m_trimOut = clip->sourceOut;
     if (m_arrastre == Arrastre::BordeInicio) {
@@ -230,6 +242,67 @@ void CTimelineWnd::CalcularTrim(int dx) {
             maximo = std::min(maximo, clip->sourceOut + (inicioSiguiente - clip->timelineEnd()));
         m_trimOut = std::clamp(clip->sourceOut + delta, clip->sourceIn + cuadro, std::max(maximo, clip->sourceIn + cuadro));
     }
+    // Si los límites no dejaron llegar al punto, no quedó pegado.
+    const model::TimeUs borde = m_arrastre == Arrastre::BordeInicio ? clip->timelineStart + (m_trimIn - clip->sourceIn)
+                                                                    : clip->timelineEnd() + (m_trimOut - clip->sourceOut);
+    if (m_lineaIman && *m_lineaIman != borde) m_lineaIman.reset();
+}
+
+model::Id CTimelineWnd::PistaVinculadoEn(const model::Clip& clip, const model::Track& pistaClip,
+                                         model::Id pistaDestino) const {
+    if (!clip.vinculado()) return model::kSinId;
+    const model::Timeline& tl = m_ctrl->project().timeline();
+    if (pistaClip.kind == model::TrackKind::Video) {
+        const model::Track* a = tl.audioTrackOf(pistaDestino);
+        return a ? a->id : model::kSinId;
+    }
+    const model::Track* pistaVinculado = nullptr;
+    tl.findClip(clip.linkedClipId, &pistaVinculado);
+    return pistaVinculado ? pistaVinculado->id : model::kSinId;
+}
+
+void CTimelineWnd::AplicarIman() {
+    const model::Timeline& tl = m_ctrl->project().timeline();
+    std::vector<TramoIman> moviles;
+    std::vector<model::Id> idsMoviles;
+    auto agregar = [&](model::Id id, model::Id pista, const model::Clip& c) {
+        idsMoviles.push_back(id);
+        if (pista != model::kSinId) moviles.push_back({pista, c.timelineStart, c.timelineEnd()});
+    };
+
+    if (m_arrastreGrupo) {
+        for (model::Id id : m_ctrl->seleccion().clips) {
+            const model::Track* t = nullptr;
+            const model::Clip* c = tl.findClip(id, &t);
+            if (!c) continue;
+            agregar(id, t->id, *c);
+            const model::Track* tv = nullptr;
+            if (c->vinculado() && tl.findClip(c->linkedClipId, &tv)) agregar(c->linkedClipId, tv->id, *c);
+        }
+    } else {
+        const model::Track* t = nullptr;
+        const model::Clip* c = tl.findClip(m_clipArrastrado, &t);
+        if (!c) return;
+        agregar(c->id, m_pistaFantasma, *c);
+        if (c->vinculado()) agregar(c->linkedClipId, PistaVinculadoEn(*c, *t, m_pistaFantasma), *c);
+    }
+
+    m_lineaIman.reset();
+    const auto pegado =
+        buscarPegado(moviles, TramosFijos(idsMoviles), m_inicioFantasma - m_inicioOriginal, m_escala.umbralIman());
+    if (pegado) {
+        m_inicioFantasma = m_inicioOriginal + pegado->delta;
+        m_lineaIman = pegado->punto;
+    }
+}
+
+std::vector<TramoIman> CTimelineWnd::TramosFijos(const std::vector<model::Id>& excluidos) const {
+    std::vector<TramoIman> fijos;
+    for (const model::Track& t : m_ctrl->project().timeline().tracks)
+        for (const model::Clip& c : t.clips)
+            if (std::find(excluidos.begin(), excluidos.end(), c.id) == excluidos.end())
+                fijos.push_back({t.id, c.timelineStart, c.timelineEnd()});
+    return fijos;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,19 +458,15 @@ void CTimelineWnd::Dibujar(CDC& dc, const CRect& rc) {
         }
         // El clip vinculado se mueve/recorta igual: su fantasma va en la pista de audio de
         // la pista de video destino (o, si se arrastra el audio, en la pista de su video).
-        model::Id pistaFantasmaVinculado = model::kSinId;
-        if (c->vinculado()) {
-            const model::Timeline& tl = m_ctrl->project().timeline();
-            const model::Track* pistaVinculado = nullptr;
-            tl.findClip(c->linkedClipId, &pistaVinculado);
-            if (pistaClip->kind == model::TrackKind::Video) {
-                if (const model::Track* a = tl.audioTrackOf(pistaFantasma)) pistaFantasmaVinculado = a->id;
-            } else if (pistaVinculado) {
-                pistaFantasmaVinculado = pistaVinculado->id;
-            }
-        }
+        const model::Id pistaFantasmaVinculado = PistaVinculadoEn(*c, *pistaClip, pistaFantasma);
         fantasma(pistaFantasma, inicio, fin);
         if (pistaFantasmaVinculado != model::kSinId) fantasma(pistaFantasmaVinculado, inicio, fin);
+    }
+
+    // Línea del punto donde se pegó el arrastre.
+    if (m_lineaIman && m_seMovio) {
+        const int xi = m_escala.tiempoAX(*m_lineaIman);
+        if (xi >= kAnchoCabecera && xi <= rc.right) dc.FillSolidRect(xi, kAltoRegla, 1, rc.bottom - kAltoRegla, kImanLinea);
     }
 
     DibujarRegla(dc, rc);
@@ -656,6 +725,7 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
 
     // Un grupo no cambia de pista.
     if (m_arrastreGrupo) {
+        AplicarIman();
         Invalidate(FALSE);
         return;
     }
@@ -671,6 +741,7 @@ void CTimelineWnd::OnMouseMove(UINT /*nFlags*/, CPoint point) {
         const bool audioVinculado = origen->kind == model::TrackKind::Audio && arrastrado && arrastrado->vinculado();
         if (bajoMouse->kind == origen->kind && !audioVinculado) m_pistaFantasma = bajoMouse->id;
     }
+    AplicarIman();
     Invalidate(FALSE);
 }
 
@@ -701,6 +772,7 @@ void CTimelineWnd::OnLButtonUp(UINT nFlags, CPoint /*point*/) {
         NotificarCambio(r.ok);
     }
     m_seMovio = false;
+    m_lineaIman.reset();
     Invalidate(FALSE);
 }
 
@@ -710,6 +782,7 @@ void CTimelineWnd::OnCaptureChanged(CWnd* pWnd) {
         m_arrastre = Arrastre::Nada;
         m_arrastreGrupo = false;
         m_seMovio = false;
+        m_lineaIman.reset();
         Invalidate(FALSE);
     }
     CWnd::OnCaptureChanged(pWnd);

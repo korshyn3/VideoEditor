@@ -1,6 +1,6 @@
 // TestPip.cpp
-// Escenarios de specs/video-compositing (fase 8): transformación PiP de los clips de las
-// pistas superiores, su traducción a filtros (overlay sobre V1) y el render real.
+// Escenarios de specs/video-compositing (fase 8): transformación de los clips de video,
+// su traducción a filtros (overlay) y el render real.
 #include <doctest/doctest.h>
 
 #include "EditorController/EditorController.h"
@@ -57,12 +57,10 @@ engine::TimelineSnapshot snapshot(const Project& p) { return {p.timeline(), p.me
 TEST_CASE("PiP por defecto") {
     DosPistas d;
     const PipTransform& t = d.c(d.b).transform;
-    CHECK(t.x == 0.65);
-    CHECK(t.y == 0.65);
-    CHECK(t.scale == 0.3);
+    CHECK(t.x == 0.0);
+    CHECK(t.y == 0.0);
+    CHECK(t.scale == 1.0);
     CHECK(t.opacity == 1.0);
-    CHECK(d.p.esPistaSuperior(d.v2));
-    CHECK_FALSE(d.p.esPistaSuperior(d.v1));
 }
 
 TEST_CASE("Los valores del PiP fuera de rango se limitan") {
@@ -78,17 +76,27 @@ TEST_CASE("Los valores del PiP fuera de rango se limitan") {
     CHECK(d.c(d.b).transform.opacity == 0.0);
 }
 
-TEST_CASE("Solo pista superior") {
+TEST_CASE("Cambiar el tamaño en cualquier pista de video") {
     DosPistas d;
+    REQUIRE(d.p.setPipTransform(d.a, {0.25, 0.25, 0.5, 1}));  // A está en V1
+    CHECK(d.c(d.a).transform == PipTransform{0.25, 0.25, 0.5, 1});
+
+    // Un clip de audio no tiene tamaño.
+    MediaInfo conAudio = videoFalso("C.mp4", 2);
+    conAudio.hasAudio = true;
+    Id c = kSinId;
+    REQUIRE(d.p.appendMedia(d.v1, d.p.addMedia(conAudio), &c));
     const auto rev = d.p.revision();
-    CHECK_FALSE(d.p.setPipTransform(d.a, {0, 0, 0.5, 1}));  // A está en V1
+    CHECK_FALSE(d.p.setPipTransform(d.c(c).linkedClipId, {0, 0, 0.5, 1}));
     CHECK(d.p.revision() == rev);
 }
 
-TEST_CASE("Mover un clip a V2 conserva su transformación") {
+TEST_CASE("Mover un clip de pista conserva su tamaño") {
     DosPistas d;
     REQUIRE(d.p.setPipTransform(d.b, {0.1, 0.2, 0.4, 0.5}));
     REQUIRE(d.p.moveClip(d.b, d.v2, s(5)));
+    CHECK(d.c(d.b).transform == PipTransform{0.1, 0.2, 0.4, 0.5});
+    REQUIRE(d.p.moveClip(d.b, d.v1, s(20)));
     CHECK(d.c(d.b).transform == PipTransform{0.1, 0.2, 0.4, 0.5});
 }
 
@@ -98,9 +106,11 @@ TEST_CASE("Mover un clip a V2 conserva su transformación") {
 
 TEST_CASE("FilterGraphBuilder: PiP sobre V1") {
     DosPistas d;
+    REQUIRE(d.p.setPipTransform(d.b, {0.65, 0.65, 0.3, 1}));
     const auto g = FilterGraphBuilder::build(snapshot(d.p), {640, 360, {25, 1}}, 0);
     REQUIRE_FALSE(g.vacio);
-    CHECK(contiene(g.filtros, "scale=192:-2"));               // 30 % de 640
+    CHECK(contiene(g.filtros, "scale=192:108"));              // 30 % de 640x360
+    CHECK(contiene(g.filtros, "pad=192:108"));
     CHECK(contiene(g.filtros, "overlay=x=416:y=234"));        // 0.65 · 640, 0.65 · 360
     CHECK(contiene(g.filtros, "format=yuva420p"));
     CHECK(contiene(g.filtros, "color=c=black@0.0:s=640x360"));  // V2 después de B: transparente
@@ -113,13 +123,28 @@ TEST_CASE("FilterGraphBuilder: opacidad y efectos del PiP") {
     REQUIRE(d.p.setPipTransform(d.b, {0, 0, 0.5, 0.5}));
     REQUIRE(d.p.addEffect(d.b, Grayscale{}));
     const auto g = FilterGraphBuilder::build(snapshot(d.p), {640, 360, {25, 1}}, 0);
-    CHECK(contiene(g.filtros, "scale=320:-2"));
+    CHECK(contiene(g.filtros, "scale=320:180"));
     CHECK(contiene(g.filtros, "overlay=x=0:y=0:eof_action=pass[v2s0]"));
     CHECK(contiene(g.filtros, "lutyuv=a='val*0.5000'"));
     // El efecto va dentro de la cadena del PiP, antes de pasar a yuva420p.
     const auto hue = g.filtros.find("hue=s=0");
     REQUIRE(hue != std::string::npos);
     CHECK(hue < g.filtros.find("format=yuva420p"));
+}
+
+TEST_CASE("FilterGraphBuilder: tamaño de un clip de V1") {
+    DosPistas d;
+    REQUIRE(d.p.removeClip(d.b, false));
+    // Sin transformación, ocupa el lienzo sin overlay.
+    auto g = FilterGraphBuilder::build(snapshot(d.p), {640, 360, {25, 1}}, 0);
+    CHECK_FALSE(contiene(g.filtros, "overlay"));
+
+    // Con transformación, sobre el fondo negro y sin dejar de ser yuv420p.
+    REQUIRE(d.p.setPipTransform(d.a, {0.25, 0.25, 0.5, 1}));
+    g = FilterGraphBuilder::build(snapshot(d.p), {640, 360, {25, 1}}, 0);
+    CHECK(contiene(g.filtros, "scale=320:180"));
+    CHECK(contiene(g.filtros, "color=c=black:s=640x360"));
+    CHECK(contiene(g.filtros, "overlay=x=160:y=90:eof_action=pass,format=yuv420p"));
 }
 
 TEST_CASE("FilterGraphBuilder: una pista superior vacía no se compone") {
@@ -180,12 +205,13 @@ TEST_CASE("GraphRunner: un PiP que empieza en 3 s no congela el fondo") {
     REQUIRE(imp.clips.size() == 1);
     const Track* v2 = nullptr;
     for (const Track& t : ctrl.project().timeline().tracks)
-        if (ctrl.project().esPistaSuperior(t.id)) v2 = &t;
+        if (t.kind == TrackKind::Video && t.id != ctrl.project().timeline().firstTrack(TrackKind::Video)->id) v2 = &t;
     REQUIRE(v2);
     ctrl.seleccionarPista(v2->id);
     const auto pip = ctrl.importFiles({medioPrueba("solo_video.mp4")});  // V2 0–3
     REQUIRE(pip.clips.size() == 1);
     REQUIRE(ctrl.moveClip(pip.clips[0], v2->id, s(3)));  // V2 3–6
+    REQUIRE(ctrl.setPipTransform(pip.clips[0], {0.65, 0.65, 0.3, 1}));
 
     const engine::RenderSettings rs{320, 240, {25, 1}};
     int ancho = 0;
@@ -210,7 +236,7 @@ TEST_CASE("GraphRunner: PiP parcialmente fuera y semitransparente") {
     Id v2 = kSinId;
     REQUIRE(ctrl.addTrack(TrackKind::Video));
     for (const Track& t : ctrl.project().timeline().tracks)
-        if (ctrl.project().esPistaSuperior(t.id)) v2 = t.id;
+        if (t.kind == TrackKind::Video && t.id != ctrl.project().timeline().firstTrack(TrackKind::Video)->id) v2 = t.id;
     ctrl.seleccionarPista(ctrl.project().timeline().firstTrack(TrackKind::Video)->id);
     REQUIRE(ctrl.importFiles({medioPrueba("video_audio.mp4")}).clips.size() == 1);
     ctrl.seleccionarPista(v2);
@@ -219,4 +245,41 @@ TEST_CASE("GraphRunner: PiP parcialmente fuera y semitransparente") {
     REQUIRE(ctrl.setPipTransform(pip.clips[0], {0.9, 0.0, 0.5, 0.5}));
     const auto sumas = sumasDeCuadros(FilterGraphBuilder::build(snapshot(ctrl.project()), {320, 240, {25, 1}}, 0));
     CHECK(sumas.size() == 125);
+}
+
+TEST_CASE("GraphRunner: un clip en V2 por defecto mide lo mismo que en V1") {
+    // Lienzo cuadrado: el video queda con bandas, y deben coincidir en las dos pistas.
+    const engine::RenderSettings rs{320, 320, {25, 1}};
+    controller::EditorController enV1;
+    REQUIRE(enV1.importFiles({medioPrueba("solo_video.mp4")}).clips.size() == 1);
+    const auto sumasV1 = sumasDeCuadros(FilterGraphBuilder::build(snapshot(enV1.project()), rs, 0));
+
+    controller::EditorController enV2;
+    REQUIRE(enV2.addTrack(TrackKind::Video));
+    for (const Track& t : enV2.project().timeline().tracks)
+        if (t.kind == TrackKind::Video && t.id != enV2.project().timeline().firstTrack(TrackKind::Video)->id)
+            enV2.seleccionarPista(t.id);
+    REQUIRE(enV2.importFiles({medioPrueba("solo_video.mp4")}).clips.size() == 1);
+    const auto sumasV2 = sumasDeCuadros(FilterGraphBuilder::build(snapshot(enV2.project()), rs, 0));
+
+    REQUIRE(sumasV1.size() == sumasV2.size());
+    REQUIRE(sumasV1.size() > 10);
+    CHECK(static_cast<double>(sumasV2[10]) == doctest::Approx(static_cast<double>(sumasV1[10])).epsilon(0.02));
+}
+
+TEST_CASE("GraphRunner: transición entre un clip de V1 reducido y otro a pantalla completa") {
+    controller::EditorController ctrl;
+    const auto imp = ctrl.importFiles({medioPrueba("solo_video.mp4"), medioPrueba("solo_video.mp4")});  // 0–3, 3–6
+    REQUIRE(imp.clips.size() == 2);
+    REQUIRE(ctrl.setPipTransform(imp.clips[0], {0.25, 0.25, 0.5, 1}));
+    REQUIRE(ctrl.addTransition(imp.clips[0], TransitionStyle::Dissolve, s(1)));
+    const auto sumas = sumasDeCuadros(FilterGraphBuilder::build(snapshot(ctrl.project()), {320, 240, {25, 1}}, 0));
+    CHECK(sumas.size() == 125);  // 3 + 3 - 1 s
+
+    // El clip reducido deja negro alrededor: su cuadro es más oscuro que a pantalla completa.
+    controller::EditorController completo;
+    REQUIRE(completo.importFiles({medioPrueba("solo_video.mp4")}).clips.size() == 1);
+    const auto sumasCompleto = sumasDeCuadros(FilterGraphBuilder::build(snapshot(completo.project()), {320, 240, {25, 1}}, 0));
+    REQUIRE(sumasCompleto.size() > 10);
+    CHECK(sumas[10] < sumasCompleto[10]);
 }

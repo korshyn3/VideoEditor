@@ -172,19 +172,27 @@ std::string cadenaHuecoTransparente(const RenderSettings& s, long long n) {
            racional(s.fps) + ",format=yuva420p,setsar=1,trim=end_frame=" + std::to_string(n);
 }
 
-// Cadena de un clip de una pista superior (PiP): se escala a su fracción del ancho del
-// lienzo (conservando la relación de aspecto), se le aplican los efectos y se le agrega
-// el canal alfa con su opacidad. Después se coloca sobre un lienzo transparente con
-// overlay (que recorta lo que queda fuera).
+// Lado del recuadro de un clip con transformación: su fracción del lado del lienzo (par).
+int ladoRecuadro(double scale, int ladoLienzo) {
+    return std::max(2, static_cast<int>(std::lround(scale * ladoLienzo)) & ~1);
+}
+
+// Cadena de un clip con transformación (PiP): se ajusta a su recuadro igual que un clip a
+// pantalla completa se ajusta al lienzo, pero con las bandas transparentes; se le aplican
+// los efectos y se le agrega el canal alfa con su opacidad. Después se coloca sobre el
+// lienzo con overlay (que recorta lo que queda fuera).
 std::string cadenaVideoPip(const RenderSettings& s, long long n, const model::Clip& clip, TimeUs desdeInicioClip) {
-    const int ancho = std::max(2, static_cast<int>(std::lround(clip.transform.scale * s.width)) & ~1);
+    const std::string W = std::to_string(ladoRecuadro(clip.transform.scale, s.width));
+    const std::string H = std::to_string(ladoRecuadro(clip.transform.scale, s.height));
     const std::string efectos = cadenaEfectos(clip);
     const std::string inicio = (!efectos.empty() && desdeInicioClip > 0)
                                    ? "setpts=PTS-STARTPTS+" + seg(desdeInicioClip) + "/TB,"
                                    : "setpts=PTS-STARTPTS,";
-    std::string f = inicio + "scale=" + std::to_string(ancho) + ":-2,setsar=1,fps=" + racional(s.fps) +
-                    ",format=yuv420p," + efectos + "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" +
-                    std::to_string(n) + ",setpts=PTS-STARTPTS,format=yuva420p";
+    std::string f = inicio + "scale=" + W + ":" + H + ":force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                    "setsar=1,fps=" + racional(s.fps) + ",format=yuv420p," + efectos +
+                    "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + std::to_string(n) +
+                    ",setpts=PTS-STARTPTS,format=yuva420p,"
+                    "pad=" + W + ":" + H + ":(ow-iw)/2:(oh-ih)/2:color=black@0.0";
     // (colorchannelmixer solo trabaja en RGB; lutyuv cambia el alfa sin convertir.)
     if (clip.transform.opacity < 1.0) f += ",lutyuv=a='val*" + num(clip.transform.opacity) + "'";
     return f;
@@ -355,13 +363,14 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
     };
 
     // ---- Video: una pista por cada pista de video, compuestas de abajo hacia arriba ----
-    // Un clip de video de `n` cuadros desde el cuadro `a`, con la etiqueta dada. En V1
-    // ocupa todo el lienzo; en una pista superior es un PiP sobre un lienzo transparente.
+    // Un clip de video de `n` cuadros desde el cuadro `a`, con la etiqueta dada. En una
+    // pista superior es un PiP sobre un lienzo transparente; en V1, sobre el fondo negro
+    // (y sin transformación ocupa todo el lienzo, sin overlay).
     auto clipVideo = [&](const model::Clip& c, long long a, long long n, long long finEntrada,
                          const std::string& etiqueta, bool superior) {
         const TimeUs iniClip = tiempoDeCuadro(a, fps);
         // Un medio offline (no se encontró al abrir el proyecto) se ve en negro: todo el
-        // lienzo en V1, el recuadro del PiP en las pistas superiores.
+        // lienzo en V1, el recuadro del clip en las pistas superiores.
         const model::MediaInfo* info = snap.media.find(c.mediaId);
         const bool offline = !info || info->offline;
         if (offline && !superior) {
@@ -371,24 +380,22 @@ GraphDescription FilterGraphBuilder::build(const TimelineSnapshot& snap, const R
         const long x = std::lround(c.transform.x * salida.width);
         const long y = std::lround(c.transform.y * salida.height);
         if (offline) {
-            const int ancho = std::max(2, static_cast<int>(std::lround(c.transform.scale * salida.width)) & ~1);
-            const int alto = (info && info->width > 0)
-                                 ? std::max(2, static_cast<int>(static_cast<long long>(ancho) * info->height / info->width) & ~1)
-                                 : ancho;
-            g += "color=c=black:s=" + std::to_string(ancho) + "x" + std::to_string(alto) + ":r=" + racional(fps) +
+            g += "color=c=black:s=" + std::to_string(ladoRecuadro(c.transform.scale, salida.width)) + "x" +
+                 std::to_string(ladoRecuadro(c.transform.scale, salida.height)) + ":r=" + racional(fps) +
                  ",format=yuva420p,trim=end_frame=" + std::to_string(n) + "[" + etiqueta + "p];\n";
         } else {
             const GraphInput in = nuevaEntrada(c, true, iniClip, tiempoDeCuadro(finEntrada, fps));
             const TimeUs desde = std::max<TimeUs>(0, iniClip - c.timelineStart);
-            if (!superior) {
+            if (!superior && c.transform == model::PipTransform{}) {
                 g += "[" + in.label + "]" + cadenaVideoClip(salida, n, c, desde) + "[" + etiqueta + "];\n";
                 return;
             }
             g += "[" + in.label + "]" + cadenaVideoPip(salida, n, c, desde) + "[" + etiqueta + "p];\n";
         }
-        g += cadenaHuecoTransparente(salida, n) + "[" + etiqueta + "b];\n";
+        g += (superior ? cadenaHuecoTransparente(salida, n) : cadenaHuecoVideo(salida, n)) + "[" + etiqueta + "b];\n";
+        // (V1 sigue en yuv420p, para que xfade y concat reciban lo mismo de todos sus clips.)
         g += "[" + etiqueta + "b][" + etiqueta + "p]overlay=x=" + std::to_string(x) + ":y=" + std::to_string(y) +
-             ":eof_action=pass[" + etiqueta + "];\n";
+             ":eof_action=pass" + (superior ? "" : ",format=yuv420p") + "[" + etiqueta + "];\n";
     };
 
     // Un segmento de video con la etiqueta dada: hueco (negro en V1, transparente en las
