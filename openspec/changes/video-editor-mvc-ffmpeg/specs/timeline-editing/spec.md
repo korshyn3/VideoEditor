@@ -9,11 +9,11 @@ El proyecto MUST tener un timeline con una o más pistas de video, una pista de 
 
 #### Scenario: Proyecto nuevo
 - **WHEN** el usuario crea un proyecto nuevo
-- **THEN** el timeline tiene una pista de video (V1), su pista de audio (Audio V1), una pista de audio general (A1) y ningún clip
+- **THEN** el timeline tiene una pista de video (V1), su pista de audio (AV1), una pista de audio general (A1) y ningún clip
 
 #### Scenario: Agregar pistas
 - **WHEN** el usuario agrega una pista de video o de audio
-- **THEN** la nueva pista aparece en el timeline vacía, con nombre correlativo (V2, A2, ...); una pista de video nueva trae además su pista de audio (Audio V2)
+- **THEN** la nueva pista aparece en el timeline vacía, con nombre correlativo (V2, A2, ...); una pista de video nueva trae además su pista de audio (AV2)
 
 ### Requirement: Configuración del lienzo del proyecto
 El proyecto MUST tener una resolución y unos fps de salida. Al importar el primer video en un proyecto vacío, toma la resolución y los fps de ese video. Después, el usuario los puede cambiar.

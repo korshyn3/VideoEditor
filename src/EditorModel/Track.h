@@ -5,7 +5,7 @@
 // timelineStart y no se solapan (salvo donde hay una transición).
 //
 // Hay dos tipos de pista de audio:
-//   - pista de audio DE VIDEO ("Audio V1"): pertenece a una pista de video
+//   - pista de audio DE VIDEO ("AV1"): pertenece a una pista de video
 //     (videoTrackId) y recibe automáticamente el audio vinculado de sus clips;
 //   - pista de audio GENERAL (A1, A2...): videoTrackId == kSinId; para música y para
 //     audios desvinculados.
@@ -48,5 +48,10 @@ struct Track {
         return nullptr;
     }
 };
+
+// Nombre de la pista de audio de una pista de video ("AV1" para "V1").
+inline std::string nombreAudioDe(const Track& pistaVideo) {
+    return "A" + pistaVideo.name;
+}
 
 } // namespace model

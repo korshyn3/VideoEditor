@@ -74,7 +74,7 @@ No se usa vcpkg: las dos bibliotecas que quedan (`nlohmann/json` y `doctest`) so
   - `Project` contiene `MediaPool`, `Timeline`, `CanvasSettings {w, h, fps}`, `ExportSettings`, `dirty` y `revision`.
   - `MediaPool` guarda los `MediaInfo` (ruta UTF-8, duración, hasVideo/hasAudio, w, h, fps, códecs, sampleRate, channels, offline).
   - `Timeline` contiene un `vector<Track>`.
-  - `Track` tiene `{id, kind: Video|Audio, name, muted, videoTrackId, clips, transitions}`. `videoTrackId` es la pista de video a la que pertenece una **pista de audio de video** ("Audio V1"); vale `kSinId` en las pistas de video y en las **pistas de audio generales** (A1, A2...).
+  - `Track` tiene `{id, kind: Video|Audio, name, muted, videoTrackId, clips, transitions}`. `videoTrackId` es la pista de video a la que pertenece una **pista de audio de video** ("AV1"); vale `kSinId` en las pistas de video y en las **pistas de audio generales** (A1, A2...).
   - `Clip` tiene `{id, mediaId, sourceIn, sourceOut, timelineStart, linkedClipId, effects, transform}`. `linkedClipId` une un clip de video con su clip de audio (en los dos sentidos); `kSinId` = sin vínculo.
   - `Effect` es un `std::variant<Grayscale, BrightnessContrast, Blur, Fade>`.
   - `Transition` tiene `{fromClipId, toClipId, style, duration}`.

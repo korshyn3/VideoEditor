@@ -292,6 +292,11 @@ bool ProjectSerializer::fromJson(const std::string& texto, Project& salida, std:
             }
         }
 
+        // El nombre de las pistas de audio de video sale de su pista de video (así los
+        // proyectos que guardaron "Audio V1" se abren con el nombre actual).
+        for (Track& t : p.timeline_.tracks)
+            if (t.videoTrackId != kSinId) t.name = nombreAudioDe(*tl.findTrack(t.videoTrackId));
+
         // Vínculos: recíprocos, mismo medio, tramo y posición, y el audio en la pista de
         // audio de la pista de video del otro.
         for (const Track& t : tl.tracks) {

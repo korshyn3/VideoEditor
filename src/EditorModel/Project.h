@@ -30,7 +30,7 @@ struct CanvasSettings {
 
 class Project {
 public:
-    // Proyecto nuevo: una pista de video (V1), su pista de audio (Audio V1), una pista de
+    // Proyecto nuevo: una pista de video (V1), su pista de audio (AV1), una pista de
     // audio general (A1) y ningún clip.
     Project();
 

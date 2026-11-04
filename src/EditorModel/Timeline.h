@@ -2,7 +2,7 @@
 // Capa: MODEL.
 //
 // El timeline es la lista de pistas, en este orden: pistas de video (V1 es el fondo y las
-// siguientes se dibujan encima), pistas de audio de video (Audio V1, Audio V2...) y
+// siguientes se dibujan encima), pistas de audio de video (AV1, AV2...) y
 // pistas de audio generales (A1, A2...).
 // Es un tipo valor (copiable): el preview recibe una COPIA ("snapshot") para trabajar en
 // otro hilo sin bloquear el modelo (design.md, D8).

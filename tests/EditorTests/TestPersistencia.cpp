@@ -198,6 +198,19 @@ TEST_CASE("Abrir un proyecto de la versión 1: los clips de V1 ocupan todo el li
     CHECK(cargado.timeline().findClip(b)->transform == antiguo);
 }
 
+TEST_CASE("Abrir un proyecto con el nombre anterior de las pistas de audio de video") {
+    Project p;
+    std::string texto = ProjectSerializer::toJson(p);
+    const auto pos = texto.find("\"AV1\"");
+    REQUIRE(pos != std::string::npos);
+    texto.replace(pos, 5, "\"Audio V1\"");
+
+    Project cargado;
+    std::string error;
+    REQUIRE_MESSAGE(ProjectSerializer::fromJson(texto, cargado, &error), error);
+    CHECK(cargado.timeline().tracks[1].name == "AV1");
+}
+
 TEST_CASE("Vínculos o transiciones incoherentes se rechazan") {
     Project p;
     const Id v1 = p.timeline().firstTrack(TrackKind::Video)->id;

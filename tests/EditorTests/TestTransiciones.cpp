@@ -32,7 +32,7 @@ MediaInfo videoFalso(const std::string& nombre, double segundos, bool audio = tr
     return m;
 }
 
-// V1: A (10 s) 0–10 y B (5 s) 10–15, con su audio vinculado en "Audio V1".
+// V1: A (10 s) 0–10 y B (5 s) 10–15, con su audio vinculado en "AV1".
 struct DosClips {
     Project p;
     Id v1 = kSinId, a = kSinId, b = kSinId;
@@ -166,7 +166,7 @@ TEST_CASE("Se rechaza si un audio vinculado se solaparía") {
     const auto rev = d.p.revision();
     const OpResult r = d.p.addTransition(d.a, TransitionStyle::Dissolve, s(1));
     CHECK_FALSE(r.ok);
-    CHECK(contiene(r.error, "Audio V1"));
+    CHECK(contiene(r.error, "AV1"));
     CHECK(d.p.revision() == rev);
     CHECK(d.c(d.b).timelineStart == s(10));
 }

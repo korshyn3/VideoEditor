@@ -433,7 +433,7 @@ void CEditorDlg::ActualizarReproduccion() {
         KillTimer(kTimerReproduccion);
         m_timeline.Invalidate(FALSE);
     }
-    SetDlgItemText(IDC_BTN_PLAY, reproduciendo ? L"Pausa" : L"Play");
+    SetDlgItemText(IDC_BTN_PLAY, reproduciendo ? L"Pausa" : L"Reproducir");
     SetDlgItemText(IDC_STATIC_TIEMPO, TextoTiempo(m_controller.playhead()) + L" / " +
                                           TextoTiempo(m_controller.project().timeline().duration()));
 }

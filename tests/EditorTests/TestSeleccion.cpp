@@ -245,7 +245,7 @@ TEST_CASE("Tapar un clip completo") {
 
 TEST_CASE("Sobrescribir un video con audio vinculado") {
     Project p;
-    const Id a = colocar(p, videoFalso("A.mp4", 10, true), 0);  // 0–10 + audio en Audio V1
+    const Id a = colocar(p, videoFalso("A.mp4", 10, true), 0);  // 0–10 + audio en AV1
     const Id m = colocar(p, videoFalso("M.mp4", 2), 10);        // 10–12, sin audio
     REQUIRE(p.moveClip(m, v1De(p), s(4), true));
 

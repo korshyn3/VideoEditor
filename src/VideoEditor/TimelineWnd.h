@@ -11,7 +11,7 @@
 //   | A1       |   [clip de audio]                        |   <- pistas de audio
 //   +----------+------------------------------------------+
 //
-// Debajo de las pistas de video están sus pistas de audio ("Audio V1"...) y al final las
+// Debajo de las pistas de video están sus pistas de audio ("AV1"...) y al final las
 // pistas de audio generales (A1...). Las pistas de audio tienen en su cabecera un botón
 // "M" para silenciarlas (mute). Los clips vinculados (video <-> su audio) llevan la marca
 // "↔" y se mueven y recortan juntos: el arrastre muestra el fantasma de los dos.

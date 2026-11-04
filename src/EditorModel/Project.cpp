@@ -10,11 +10,6 @@ namespace model {
 
 namespace {
 
-// Nombre de la pista de audio de una pista de video ("Audio V1").
-std::string nombreAudioDe(const Track& pistaVideo) {
-    return "Audio " + pistaVideo.name;
-}
-
 Clip* buscarClip(Timeline& tl, Id id, Track** pista = nullptr) {
     for (Track& t : tl.tracks) {
         for (Clip& c : t.clips) {

@@ -53,7 +53,7 @@ TEST_CASE("Proyecto nuevo") {
     CHECK(tracks[0].kind == TrackKind::Video);
     CHECK(tracks[0].name == "V1");
     CHECK(tracks[1].esAudioDeVideo());
-    CHECK(tracks[1].name == "Audio V1");
+    CHECK(tracks[1].name == "AV1");
     CHECK(tracks[1].videoTrackId == tracks[0].id);
     CHECK(tracks[2].esAudioGeneral());
     CHECK(tracks[2].name == "A1");
