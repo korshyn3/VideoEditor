@@ -1,4 +1,5 @@
 // TestController.cpp
+// Capa: TESTS.
 // Escenarios que pasan por el controller (usan medios de prueba reales).
 #include <doctest/doctest.h>
 

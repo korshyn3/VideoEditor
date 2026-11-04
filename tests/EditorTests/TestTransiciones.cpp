@@ -1,4 +1,5 @@
 // TestTransiciones.cpp
+// Capa: TESTS.
 // Escenarios de specs/clip-transitions (fase 7): agregar, cambiar y quitar transiciones
 // (con el solapamiento de los clips y de sus audios vinculados), su invalidación al
 // editar, la cadena xfade/acrossfade del grafo y el render real.

@@ -1,4 +1,5 @@
 // TestAudio.cpp
+// Capa: TESTS.
 // Escenarios de specs/audio-tracks (fase 5): pistas de audio de video y generales, audio
 // vinculado a los clips de video, operaciones sobre clips vinculados, desvincular,
 // importación de audio y mezcla/mute en el grafo.

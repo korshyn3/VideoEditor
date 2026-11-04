@@ -1,4 +1,5 @@
 // TestCortes.cpp
+// Capa: TESTS.
 // Escenarios de specs/timeline-editing de la fase 4: dividir (split), recortar (trim) y
 // eliminar clips (con hueco o con ripple), más la edición no destructiva.
 #include <doctest/doctest.h>

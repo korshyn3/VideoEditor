@@ -1,4 +1,5 @@
 // TestPersistencia.cpp
+// Capa: TESTS.
 // Escenarios de specs/project-persistence (fase 10): guardar en JSON, ida y vuelta
 // (conservando vínculos, efectos, PiP y transiciones), archivos inválidos y medios que
 // faltan al abrir.

@@ -1,4 +1,5 @@
 // TestEscalaTiempo.cpp
+// Capa: TESTS.
 // Conversión tiempo <-> píxel del timeline (src/VideoEditor/EscalaTiempo, sin MFC).
 #include <doctest/doctest.h>
 

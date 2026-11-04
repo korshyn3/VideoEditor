@@ -1,4 +1,5 @@
 // TestTiempo.cpp
+// Capa: TESTS. Utilidades de tiempo del modelo (EditorModel/Tiempo).
 #include <doctest/doctest.h>
 
 #include "EditorModel/Tiempo.h"

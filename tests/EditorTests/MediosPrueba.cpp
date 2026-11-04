@@ -1,4 +1,5 @@
 // MediosPrueba.cpp
+// Capa: TESTS. Ver MediosPrueba.h.
 #include "MediosPrueba.h"
 
 #include <windows.h>

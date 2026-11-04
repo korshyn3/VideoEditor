@@ -1,4 +1,5 @@
 // MediosPrueba.h
+// Capa: TESTS.
 // Ubicación de los medios de prueba generados por tools\generar_medios_prueba.ps1
 // (carpeta "medios_prueba" junto a EditorTests.exe).
 #pragma once

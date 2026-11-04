@@ -1,4 +1,5 @@
 // TestSeleccion.cpp
+// Capa: TESTS.
 // Escenarios de specs/timeline-editing (tarea 5.8): selección múltiple, dividir y
 // eliminar sobre toda la selección, mover varios clips juntos y mover sobrescribiendo.
 #include <doctest/doctest.h>

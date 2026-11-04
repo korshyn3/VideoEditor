@@ -1,4 +1,5 @@
 // TestExport.cpp
+// Capa: TESTS.
 // Escenarios de specs/video-export (fase 9): encoders disponibles, validación de la
 // salida, exportación real verificada con MediaProbe, cancelación y bloqueo de la edición.
 #include <doctest/doctest.h>

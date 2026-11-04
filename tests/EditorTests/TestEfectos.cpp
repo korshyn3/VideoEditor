@@ -1,4 +1,5 @@
 // TestEfectos.cpp
+// Capa: TESTS.
 // Escenarios de specs/video-effects (fase 6): lista de efectos por clip, límites de los
 // parámetros, fades, efectos al dividir/recortar, su traducción a filtros y el render.
 #include <doctest/doctest.h>

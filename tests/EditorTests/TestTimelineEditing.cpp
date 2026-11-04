@@ -1,4 +1,5 @@
 // TestTimelineEditing.cpp
+// Capa: TESTS.
 // Escenarios de specs/timeline-editing (fase 2: estructura, pistas, lienzo, colocación
 // en orden y movimiento de clips).
 #include <doctest/doctest.h>

@@ -69,27 +69,27 @@
 
 - [x] 8.1 Implementar `PipTransform` con valores por defecto (0.65, 0.65, 0.3, 1.0) y límites en el modelo; verificar con un test que un clip nuevo en V2 tiene esos valores y que se limitan los valores fuera de rango
 - [x] 8.2 Extender `FilterGraphBuilder` con la composición abajo→arriba (scale por fracción del lienzo, `format=yuva420p`, `colorchannelmixer=aa`, `overlay` con `eof_action=pass`, efectos/transiciones antes del overlay); verificar con un test de integración que un PiP que empieza en 3 s no congela el fondo antes de 3 s (riesgo de design) y con tests de cadena
-- [ ] 8.3 Añadir a `IDD_PROP_CLIP` una sección PiP (sliders de x, y, escala y opacidad, visible en cualquier pista de video); verificar a mano "PiP por defecto", "Cambiar opacidad", "Cambiar posición y escala", "Clip parcialmente fuera", "Solo pista superior" y "Efecto en el PiP"
-- [ ] 8.4 Hacer que la transformación valga en cualquier pista de video: valor por defecto a pantalla completa (mismo tamaño que en V1), `scale` como recuadro con bandas transparentes, render en V1 sobre el fondo negro y sección visible en V1, y migrar los proyectos de `formatVersion` 1; verificar con tests "PiP por defecto" y "Mover de pista conserva el tamaño", y a mano esos escenarios, "Cambiar el tamaño en V1" y "Clip de otra relación de aspecto"
+- [x] 8.3 Añadir a `IDD_PROP_CLIP` una sección PiP (sliders de x, y, escala y opacidad, visible en cualquier pista de video); verificar a mano "PiP por defecto", "Cambiar opacidad", "Cambiar posición y escala", "Clip parcialmente fuera", "Solo pista superior" y "Efecto en el PiP"
+- [x] 8.4 Hacer que la transformación valga en cualquier pista de video: valor por defecto a pantalla completa (mismo tamaño que en V1), `scale` como recuadro con bandas transparentes, render en V1 sobre el fondo negro y sección visible en V1, y migrar los proyectos de `formatVersion` 1; verificar con tests "PiP por defecto" y "Mover de pista conserva el tamaño", y a mano esos escenarios, "Cambiar el tamaño en V1" y "Clip de otra relación de aspecto"
 
 ## 9. Fase 9 — Exportación
 
 - [x] 9.1 Implementar `EncoderCatalog` (prueba con `avcodec_open2` de h264_mf, hevc_mf, mpeg4, aac, aac_mf y compatibilidad con `avformat_query_codec` para mp4/mkv/mov); verificar con un test que al menos `mpeg4` + `aac` aparecen como válidos en los tres contenedores
 - [x] 9.2 Implementar `ExportJob` en `std::jthread` (grafo con T=0 y resolución de salida con scale+pad, pix_fmt del encoder, bitrate de video/audio, encoding + mux, progreso atómico, cancelación con `stop_token`, borrado del parcial en fallo o cancelación); verificar con un test de integración que exporta 5 s a mkv/mpeg4/aac y `MediaProbe` reporta duración, resolución y streams esperados
 - [x] 9.3 Implementar en el controller la validación de ruta de salida (rechazo si coincide con una fuente, confirmación antes de sobrescribir), resolución par entre 16 y 7680 y bloqueo de la edición durante la exportación; verificar con tests "Salida igual a una fuente" y "Resolución impar"
-- [ ] 9.4 Diseñar `IDD_EXPORTAR` (contenedor, códecs filtrados, bitrates con valores por defecto 5000/192 kbps, presets 480p/720p/1080p/personalizada, `CProgressCtrl` actualizado por `SetTimer`, Cancelar, aviso final por `WM_APP_EXPORT_DONE`); verificar a mano "Elegir mkv", "Preset 720p", "Progreso visible", "Cancelar", "Exportación terminada" y "Encoder falla al iniciar"
-- [ ] 9.5 Verificar `h264_mf` en el equipo de desarrollo exportando a mp4 con 2000 kbps y comprobar con `ffprobe.exe` que el bitrate medio es cercano y que la reproducción en un reproductor externo es correcta; documentar en el README la tolerancia observada
+- [x] 9.4 Diseñar `IDD_EXPORTAR` (contenedor, códecs filtrados, bitrates con valores por defecto 5000/192 kbps, presets 480p/720p/1080p/personalizada, `CProgressCtrl` actualizado por `SetTimer`, Cancelar, aviso final por `WM_APP_EXPORT_DONE`); verificar a mano "Elegir mkv", "Preset 720p", "Progreso visible", "Cancelar", "Exportación terminada" y "Encoder falla al iniciar"
+- [x] 9.5 Verificar `h264_mf` en el equipo de desarrollo exportando a mp4 con 2000 kbps y comprobar con `ffprobe.exe` que el bitrate medio es cercano y que la reproducción en un reproductor externo es correcta; documentar en el README la tolerancia observada
 
 ## 10. Persistencia del proyecto (JSON)
 
 - [x] 10.1 Implementar `ProjectSerializer` (formatVersion 1, todas las entidades —incluidos `videoTrackId` de las pistas y `linkedClipId` de los clips—, validación completa antes de reemplazar el proyecto, incluido que los vínculos sean coherentes); verificar con tests "Guardar", "Ida y vuelta" (conserva los vínculos) y "JSON corrupto"
 - [x] 10.2 Implementar en el controller la revalidación de medios al cargar (clips offline renderizados en negro y en silencio, aviso con rutas faltantes); verificar con un test "Archivo movido"
-- [ ] 10.3 Conectar Archivo → Nuevo/Abrir/Guardar/Guardar como (`CFileDialog` con filtro `.json`, Ctrl+S) y el aviso de cambios sin guardar (Sí/No/Cancelar) en `OnClose`, Nuevo y Abrir; verificar a mano "Cerrar con cambios"
+- [x] 10.3 Conectar Archivo → Nuevo/Abrir/Guardar/Guardar como (`CFileDialog` con filtro `.json`, Ctrl+S) y el aviso de cambios sin guardar (Sí/No/Cancelar) en `OnClose`, Nuevo y Abrir; verificar a mano "Cerrar con cambios"
 
 ## 11. Integración final
 
-- [ ] 11.1 Recorrer de punta a punta un proyecto con tres videos, un split, un trim, audio desvinculado y llevado a A1, música, efectos, una transición círculo y un PiP; guardar, reabrir y exportar a mp4, mkv y mov; verificar que el resultado coincide con el preview y que los medios fuente no cambiaron
-- [ ] 11.2 Revisar que cada archivo tiene comentarios de cabecera que explican su responsabilidad y su capa, y que el README describe cómo abrir la solución en VS 2026, cómo cambiar `FFmpegRoot` y cómo correr los tests; verificar copiando el repositorio a una carpeta limpia y compilando con los pasos del README
+- [x] 11.1 Recorrer de punta a punta un proyecto con tres videos, un split, un trim, audio desvinculado y llevado a A1, música, efectos, una transición círculo y un PiP; guardar, reabrir y exportar a mp4, mkv y mov; verificar que el resultado coincide con el preview y que los medios fuente no cambiaron
+- [x] 11.2 Revisar que cada archivo tiene comentarios de cabecera que explican su responsabilidad y su capa, y que el README describe cómo abrir la solución en VS 2026, cómo cambiar `FFmpegRoot` y cómo correr los tests; verificar copiando el repositorio a una carpeta limpia y compilando con los pasos del README
 
 ## Workflow follow-up
 

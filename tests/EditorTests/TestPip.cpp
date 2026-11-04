@@ -1,4 +1,5 @@
 // TestPip.cpp
+// Capa: TESTS.
 // Escenarios de specs/video-compositing (fase 8): transformación de los clips de video,
 // su traducción a filtros (overlay) y el render real.
 #include <doctest/doctest.h>

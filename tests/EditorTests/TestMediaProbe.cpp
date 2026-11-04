@@ -1,4 +1,5 @@
 // TestMediaProbe.cpp
+// Capa: TESTS.
 // Escenarios de specs/media-import (análisis y rechazo de archivos).
 #include <doctest/doctest.h>
 

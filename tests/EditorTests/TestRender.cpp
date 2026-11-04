@@ -1,4 +1,5 @@
 // TestRender.cpp
+// Capa: TESTS.
 // Fase 3: MediaDecoder, FilterGraphBuilder (cadenas) y GraphRunner (render real).
 #include <doctest/doctest.h>
 

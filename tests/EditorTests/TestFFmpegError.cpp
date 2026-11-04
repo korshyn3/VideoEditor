@@ -1,4 +1,5 @@
 // TestFFmpegError.cpp
+// Capa: TESTS. Traducción de códigos AVERROR a texto (EditorEngine/FFmpegError).
 #include <doctest/doctest.h>
 
 #include "EditorEngine/FFmpegError.h"

@@ -8,7 +8,7 @@
 //   - editar su lista de efectos: agregar (combo + "Agregar"), subir, bajar y quitar, y
 //     cambiar los parámetros del efecto elegido con un slider (en vivo) o escribiendo el
 //     valor y pulsando Enter;
-//   - en las pistas superiores a V1, cambiar su PiP (posición x/y, escala y opacidad)
+//   - en cualquier pista de video, cambiar su PiP (posición x/y, escala y opacidad)
 //     con sliders, en vivo.
 // Cada cambio se pide al controller y después se avisa a la ventana principal con
 // WM_APP_VISTA_CAMBIO (que redibuja el timeline y actualiza el preview).
