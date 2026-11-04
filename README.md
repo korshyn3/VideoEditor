@@ -3,7 +3,7 @@
 Editor de video básico y **no destructivo** para Windows, hecho como proyecto académico.
 Usa una arquitectura **MVC estricta** y las bibliotecas de FFmpeg (libavformat, libavcodec,
 libavfilter, libswscale, libswresample y libavutil). La planificación completa (specs,
-diseño y tareas) está en `openspec/changes/video-editor-mvc-ffmpeg/`.
+diseño y tareas) está en `openspec/changes/archive/2026-11-03-video-editor-mvc-ffmpeg/`, y las specs vigentes en `openspec/specs/`.
 
 ## Requisitos
 
